@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+CLAUDE.md
+docs/
+fluair-tabpreco-merge-pedidos.html
+Comissoes/sistema_comissao_v3.html

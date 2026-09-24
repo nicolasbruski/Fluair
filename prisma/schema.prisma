@@ -1,0 +1,528 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                   @id @default(uuid()) @db.Char(36)
+  name                String                   @db.VarChar(120)
+  email               String                   @unique @db.VarChar(254)
+  passwordHash        String                   @map("password_hash") @db.VarChar(255)
+  roleId              String                   @map("role_id") @db.Char(36)
+  active              Boolean                  @default(true)
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+  role                Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  sessions            Session[]
+  permissionOverrides UserPermissionOverride[]
+  auditLogs           AuditLog[]               @relation("AuditActor")
+  importedMatrices    PriceMatrixVersion[]     @relation("MatrixImporter")
+  importedPriceLists  PriceListVersion[]       @relation("PriceListImporter")
+  calculations        CalculationVersion[]     @relation("CalculationCreator")
+  customerLinks       CalculationCustomer[]    @relation("CalculationCustomerLinker")
+  mediaAssets         MediaAsset[]             @relation("MediaAssetCreator")
+
+  @@index([roleId])
+  @@index([active])
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Char(36)
+  code        String           @unique @db.VarChar(64)
+  name        String           @db.VarChar(100)
+  description String?          @db.VarChar(255)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String                   @id @default(uuid()) @db.Char(36)
+  code        String                   @unique @db.VarChar(80)
+  description String                   @db.VarChar(255)
+  createdAt   DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  roles       RolePermission[]
+  overrides   UserPermissionOverride[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id") @db.Char(36)
+  permissionId String     @map("permission_id") @db.Char(36)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model UserPermissionOverride {
+  userId       String     @map("user_id") @db.Char(36)
+  permissionId String     @map("permission_id") @db.Char(36)
+  allowed      Boolean
+  createdAt    DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
+  @@map("user_permission_overrides")
+}
+
+model Session {
+  id         String    @id @db.Char(64)
+  userId     String    @map("user_id") @db.Char(36)
+  expiresAt  DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt  DateTime? @map("revoked_at") @db.DateTime(3)
+  ipHash     String?   @map("ip_hash") @db.Char(64)
+  userAgent  String?   @map("user_agent") @db.VarChar(255)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.DateTime(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt, revokedAt])
+  @@map("sessions")
+}
+
+model LoginThrottle {
+  key             String    @id @db.Char(64)
+  attempts        Int       @default(0)
+  windowStartedAt DateTime  @map("window_started_at") @db.DateTime(3)
+  blockedUntil    DateTime? @map("blocked_until") @db.DateTime(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@index([updatedAt])
+  @@map("login_throttles")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Char(36)
+  actorUserId String?  @map("actor_user_id") @db.Char(36)
+  action      String   @db.VarChar(80)
+  entityType  String   @map("entity_type") @db.VarChar(80)
+  entityId    String?  @map("entity_id") @db.VarChar(100)
+  metadata    Json?
+  requestId   String   @map("request_id") @db.VarChar(80)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@index([requestId])
+  @@map("audit_logs")
+}
+
+model Customer {
+  id                String                @id @default(uuid()) @db.Char(36)
+  code              String                @unique @db.VarChar(20)
+  legalName         String                @map("legal_name") @db.VarChar(180)
+  cnpj              String?               @db.Char(14)
+  city              String?               @db.VarChar(120)
+  state             String?               @db.Char(2)
+  segment           String?               @db.VarChar(80)
+  customerClassId   String?               @map("customer_class_id") @db.Char(36)
+  customerSegmentId String?               @map("customer_segment_id") @db.Char(36)
+  seller            String?               @db.VarChar(120)
+  representative    String?               @db.VarChar(120)
+  internalNote      String?               @map("internal_note") @db.Text
+  orderNote         String?               @map("order_note") @db.Text
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
+  customerClass     CustomerClass?        @relation(fields: [customerClassId], references: [id], onDelete: Restrict)
+  customerSegment   CustomerSegment?      @relation(fields: [customerSegmentId], references: [id], onDelete: Restrict)
+  calculationLinks  CalculationCustomer[]
+
+  @@index([active])
+  @@index([legalName])
+  @@index([cnpj])
+  @@index([segment])
+  @@index([customerClassId])
+  @@index([customerSegmentId])
+  @@index([seller])
+  @@index([representative])
+  @@map("customers")
+}
+
+model CustomerClass {
+  id         String           @id @default(uuid()) @db.Char(36)
+  code       String           @unique @db.VarChar(64)
+  name       String           @db.VarChar(100)
+  active     Boolean          @default(true)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.DateTime(3)
+  customers  Customer[]
+  priceLists PriceListClass[]
+
+  @@index([active, name])
+  @@map("customer_classes")
+}
+
+model CustomerSegment {
+  id         String             @id @default(uuid()) @db.Char(36)
+  code       String             @unique @db.VarChar(64)
+  name       String             @db.VarChar(100)
+  active     Boolean            @default(true)
+  createdAt  DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime           @updatedAt @map("updated_at") @db.DateTime(3)
+  customers  Customer[]
+  priceLists PriceListSegment[]
+
+  @@index([active, name])
+  @@map("customer_segments")
+}
+
+enum PriceListType {
+  KIT_COMPONENT
+  STANDALONE_PRODUCT
+}
+
+enum KitCatalogScope {
+  CUSTOMER_SPECIFIC
+  STANDARD
+}
+
+model PriceList {
+  id                   String                 @id @default(uuid()) @db.Char(36)
+  code                 String                 @unique @db.VarChar(64)
+  name                 String                 @db.VarChar(120)
+  type                 PriceListType
+  active               Boolean                @default(true)
+  minimumOrderQuantity Int?                   @map("minimum_order_quantity")
+  maximumOrderQuantity Int?                   @map("maximum_order_quantity")
+  activeVersionId      String?                @unique @map("active_version_id") @db.Char(36)
+  createdAt            DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+  classes              PriceListClass[]
+  segments             PriceListSegment[]
+  activeVersion        PriceListVersion?      @relation("ActivePriceListVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions             PriceListVersion[]     @relation("PriceListVersions")
+  calculationSeries    KitCalculationSeries[]
+
+  @@index([type, active])
+  @@map("price_lists")
+}
+
+model PriceListVersion {
+  id               String               @id @default(uuid()) @db.Char(36)
+  priceListId      String               @map("price_list_id") @db.Char(36)
+  version          Int
+  fileName         String               @map("file_name") @db.VarChar(255)
+  mimeType         String               @map("mime_type") @db.VarChar(120)
+  fileSize         Int                  @map("file_size")
+  fileHash         String               @map("file_hash") @db.Char(64)
+  sourceFile       Bytes                @map("source_file") @db.LongBlob
+  itemCount        Int                  @map("item_count")
+  importedByUserId String               @map("imported_by_user_id") @db.Char(36)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  priceList        PriceList            @relation("PriceListVersions", fields: [priceListId], references: [id], onDelete: Restrict)
+  activeForLists   PriceList[]          @relation("ActivePriceListVersion")
+  importedBy       User                 @relation("PriceListImporter", fields: [importedByUserId], references: [id], onDelete: Restrict)
+  items            PriceListItem[]
+  calculations     CalculationVersion[] @relation("CalculationPriceListVersion")
+
+  @@unique([priceListId, version])
+  @@unique([priceListId, fileHash])
+  @@index([priceListId, createdAt])
+  @@index([importedByUserId])
+  @@map("price_list_versions")
+}
+
+model PriceListItem {
+  id                 String           @id @default(uuid()) @db.Char(36)
+  priceListVersionId String           @map("price_list_version_id") @db.Char(36)
+  productCode        String           @map("product_code") @db.VarChar(32)
+  description        String?          @db.VarChar(255)
+  minimumPrice       Decimal?         @map("minimum_price") @db.Decimal(15, 4)
+  normalPrice        Decimal?         @map("normal_price") @db.Decimal(15, 4)
+  reference          String?          @db.VarChar(120)
+  unitPrice          Decimal?         @map("unit_price") @db.Decimal(15, 4)
+  ipiRate            Decimal?         @map("ipi_rate") @db.Decimal(7, 4)
+  ipiIncluded        Boolean?         @map("ipi_included")
+  icmsRate           Decimal          @default(0) @map("icms_rate") @db.Decimal(7, 4)
+  sourceRow          Int              @map("source_row")
+  rawData            Json?            @map("raw_data")
+  priceListVersion   PriceListVersion @relation(fields: [priceListVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListVersionId, productCode])
+  @@index([productCode])
+  @@map("price_list_items")
+}
+
+model PriceListClass {
+  priceListId     String        @map("price_list_id") @db.Char(36)
+  customerClassId String        @map("customer_class_id") @db.Char(36)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.DateTime(3)
+  priceList       PriceList     @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  customerClass   CustomerClass @relation(fields: [customerClassId], references: [id], onDelete: Restrict)
+
+  @@id([priceListId, customerClassId])
+  @@index([customerClassId])
+  @@map("price_list_classes")
+}
+
+model PriceListSegment {
+  priceListId       String          @map("price_list_id") @db.Char(36)
+  customerSegmentId String          @map("customer_segment_id") @db.Char(36)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.DateTime(3)
+  priceList         PriceList       @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  customerSegment   CustomerSegment @relation(fields: [customerSegmentId], references: [id], onDelete: Restrict)
+
+  @@id([priceListId, customerSegmentId])
+  @@index([customerSegmentId])
+  @@map("price_list_segments")
+}
+
+model PriceProfile {
+  id                    String               @id @default(uuid()) @db.Char(36)
+  code                  String               @unique @db.VarChar(32)
+  name                  String               @db.VarChar(100)
+  activeMatrixVersionId String?              @unique @map("active_matrix_version_id") @db.Char(36)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  activeMatrixVersion   PriceMatrixVersion?  @relation("ActiveMatrixVersion", fields: [activeMatrixVersionId], references: [id], onDelete: SetNull)
+  matrixVersions        PriceMatrixVersion[] @relation("ProfileMatrixVersions")
+  priceLists            KitPriceList[]
+
+  @@map("price_profiles")
+}
+
+model PriceMatrixVersion {
+  id                String               @id @default(uuid()) @db.Char(36)
+  profileId         String               @map("profile_id") @db.Char(36)
+  version           Int
+  fileName          String               @map("file_name") @db.VarChar(255)
+  mimeType          String               @map("mime_type") @db.VarChar(120)
+  fileSize          Int                  @map("file_size")
+  fileHash          String               @map("file_hash") @db.Char(64)
+  sourceFile        Bytes                @map("source_file") @db.LongBlob
+  itemCount         Int                  @map("item_count")
+  importedByUserId  String               @map("imported_by_user_id") @db.Char(36)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  profile           PriceProfile         @relation("ProfileMatrixVersions", fields: [profileId], references: [id], onDelete: Restrict)
+  activeForProfiles PriceProfile[]       @relation("ActiveMatrixVersion")
+  importedBy        User                 @relation("MatrixImporter", fields: [importedByUserId], references: [id], onDelete: Restrict)
+  items             PriceMatrixItem[]
+  calculations      CalculationVersion[]
+
+  @@unique([profileId, version])
+  @@unique([profileId, fileHash])
+  @@index([profileId, createdAt])
+  @@index([importedByUserId])
+  @@map("price_matrix_versions")
+}
+
+model PriceMatrixItem {
+  id              String             @id @default(uuid()) @db.Char(36)
+  matrixVersionId String             @map("matrix_version_id") @db.Char(36)
+  productCode     String             @map("product_code") @db.VarChar(32)
+  minimumPrice    Decimal            @map("minimum_price") @db.Decimal(15, 4)
+  normalPrice     Decimal            @map("normal_price") @db.Decimal(15, 4)
+  sourceRow       Int                @map("source_row")
+  rawData         Json?              @map("raw_data")
+  matrixVersion   PriceMatrixVersion @relation(fields: [matrixVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([matrixVersionId, productCode])
+  @@index([productCode])
+  @@map("price_matrix_items")
+}
+
+model Product {
+  id               String            @id @default(uuid()) @db.Char(36)
+  code             String            @unique @db.VarChar(32)
+  description      String            @db.VarChar(255)
+  reference        String?           @db.VarChar(120)
+  unit             String?           @db.VarChar(30)
+  currentImageId   String?           @map("current_image_id") @db.Char(36)
+  firstSeenAt      DateTime          @default(now()) @map("first_seen_at") @db.DateTime(3)
+  lastSeenAt       DateTime          @default(now()) @map("last_seen_at") @db.DateTime(3)
+  currentImage     MediaAsset?       @relation("ProductCurrentImage", fields: [currentImageId], references: [id], onDelete: Restrict)
+  calculationItems CalculationItem[]
+
+  @@index([currentImageId])
+  @@map("products")
+}
+
+model Kit {
+  id                String                 @id @default(uuid()) @db.Char(36)
+  code              String                 @unique @db.VarChar(32)
+  description       String                 @db.VarChar(255)
+  reference         String?                @db.VarChar(120)
+  currentImageId    String?                @map("current_image_id") @db.Char(36)
+  createdAt         DateTime               @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime               @updatedAt @map("updated_at") @db.DateTime(3)
+  currentImage      MediaAsset?            @relation("KitCurrentImage", fields: [currentImageId], references: [id], onDelete: Restrict)
+  priceLists        KitPriceList[]
+  calculationSeries KitCalculationSeries[]
+
+  @@index([currentImageId])
+  @@index([reference])
+  @@map("kits")
+}
+
+model MediaAsset {
+  id                  String               @id @default(uuid()) @db.Char(36)
+  originalFileName    String               @map("original_file_name") @db.VarChar(255)
+  originalMimeType    String               @map("original_mime_type") @db.VarChar(40)
+  mimeType            String               @map("mime_type") @db.VarChar(40)
+  sourceSize          Int                  @map("source_size")
+  sourceSha256        String               @map("source_sha256") @db.Char(64)
+  width               Int
+  height              Int
+  displaySize         Int                  @map("display_size")
+  displaySha256       String               @map("display_sha256") @db.Char(64)
+  displayData         Bytes                @map("display_data") @db.LongBlob
+  thumbnailWidth      Int                  @map("thumbnail_width")
+  thumbnailHeight     Int                  @map("thumbnail_height")
+  thumbnailSize       Int                  @map("thumbnail_size")
+  thumbnailSha256     String               @map("thumbnail_sha256") @db.Char(64)
+  thumbnailData       Bytes                @map("thumbnail_data") @db.LongBlob
+  createdByUserId     String               @map("created_by_user_id") @db.Char(36)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  createdBy           User                 @relation("MediaAssetCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  currentForProducts  Product[]            @relation("ProductCurrentImage")
+  currentForKits      Kit[]                @relation("KitCurrentImage")
+  calculationVersions CalculationVersion[] @relation("CalculationKitImage")
+
+  @@index([createdByUserId, createdAt])
+  @@index([sourceSha256])
+  @@map("media_assets")
+}
+
+model KitCalculationSeries {
+  id           String               @id @default(uuid()) @db.Char(36)
+  kitId        String               @map("kit_id") @db.Char(36)
+  priceListId  String               @map("price_list_id") @db.Char(36)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  kit          Kit                  @relation(fields: [kitId], references: [id], onDelete: Restrict)
+  priceList    PriceList            @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  calculations CalculationVersion[] @relation("CalculationSeries")
+
+  @@unique([kitId, priceListId])
+  @@index([priceListId])
+  @@map("kit_calculation_series")
+}
+
+model KitPriceList {
+  id           String               @id @default(uuid()) @db.Char(36)
+  kitId        String               @map("kit_id") @db.Char(36)
+  profileId    String               @map("profile_id") @db.Char(36)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.DateTime(3)
+  kit          Kit                  @relation(fields: [kitId], references: [id], onDelete: Restrict)
+  profile      PriceProfile         @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  calculations CalculationVersion[]
+
+  @@unique([kitId, profileId])
+  @@index([profileId])
+  @@map("kit_price_lists")
+}
+
+model CalculationVersion {
+  id                     String                @id @default(uuid()) @db.Char(36)
+  priceListId            String?               @map("price_list_id") @db.Char(36)
+  matrixVersionId        String?               @map("matrix_version_id") @db.Char(36)
+  kitCalculationSeriesId String                @map("kit_calculation_series_id") @db.Char(36)
+  priceListVersionId     String                @map("price_list_version_id") @db.Char(36)
+  version                Int
+  current                Boolean               @default(true)
+  kitDescription         String                @map("kit_description") @db.VarChar(255)
+  sourceFileName         String                @map("source_file_name") @db.VarChar(255)
+  sourceFileSize         Int                   @map("source_file_size")
+  sourceFileHash         String                @map("source_file_hash") @db.Char(64)
+  minimumTotal           Decimal               @map("minimum_total") @db.Decimal(15, 4)
+  normalTotal            Decimal               @map("normal_total") @db.Decimal(15, 4)
+  catalogDescription     String?               @map("catalog_description") @db.VarChar(255)
+  catalogMinimumPrice    Decimal?              @map("catalog_minimum_price") @db.Decimal(15, 4)
+  catalogNormalPrice     Decimal?              @map("catalog_normal_price") @db.Decimal(15, 4)
+  catalogVisible         Boolean               @default(true) @map("catalog_visible")
+  catalogScope           KitCatalogScope       @default(CUSTOMER_SPECIFIC) @map("catalog_scope")
+  itemCount              Int                   @map("item_count")
+  missingPriceCount      Int                   @map("missing_price_count")
+  origin                 String                @db.VarChar(40)
+  kitImageId             String?               @map("kit_image_id") @db.Char(36)
+  createdByUserId        String                @map("created_by_user_id") @db.Char(36)
+  createdAt              DateTime              @default(now()) @map("created_at") @db.DateTime(3)
+  priceList              KitPriceList?         @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  matrixVersion          PriceMatrixVersion?   @relation(fields: [matrixVersionId], references: [id], onDelete: Restrict)
+  series                 KitCalculationSeries  @relation("CalculationSeries", fields: [kitCalculationSeriesId], references: [id], onDelete: Restrict)
+  priceListVersion       PriceListVersion      @relation("CalculationPriceListVersion", fields: [priceListVersionId], references: [id], onDelete: Restrict)
+  createdBy              User                  @relation("CalculationCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  kitImage               MediaAsset?           @relation("CalculationKitImage", fields: [kitImageId], references: [id], onDelete: Restrict)
+  items                  CalculationItem[]
+  customers              CalculationCustomer[]
+
+  @@unique([priceListId, version])
+  @@unique([kitCalculationSeriesId, version])
+  @@index([priceListId, current])
+  @@index([matrixVersionId])
+  @@index([kitCalculationSeriesId])
+  @@index([priceListVersionId])
+  @@index([createdByUserId, createdAt])
+  @@index([kitImageId])
+  @@index([sourceFileHash])
+  @@index([catalogVisible])
+  @@index([catalogScope, catalogVisible])
+  @@map("calculation_versions")
+}
+
+model CalculationItem {
+  id                   String             @id @default(uuid()) @db.Char(36)
+  calculationVersionId String             @map("calculation_version_id") @db.Char(36)
+  productId            String             @map("product_id") @db.Char(36)
+  lineNumber           Int                @map("line_number")
+  productCode          String             @map("product_code") @db.VarChar(32)
+  description          String             @db.VarChar(255)
+  quantity             Decimal            @db.Decimal(15, 4)
+  unit                 String             @db.VarChar(30)
+  minimumUnitPrice     Decimal            @map("minimum_unit_price") @db.Decimal(15, 4)
+  normalUnitPrice      Decimal            @map("normal_unit_price") @db.Decimal(15, 4)
+  catalogDescription   String?            @map("catalog_description") @db.VarChar(255)
+  catalogMinimumPrice  Decimal?           @map("catalog_minimum_price") @db.Decimal(15, 4)
+  catalogNormalPrice   Decimal?           @map("catalog_normal_price") @db.Decimal(15, 4)
+  catalogVisible       Boolean            @default(true) @map("catalog_visible")
+  minimumTotal         Decimal            @map("minimum_total") @db.Decimal(15, 4)
+  normalTotal          Decimal            @map("normal_total") @db.Decimal(15, 4)
+  hasPrice             Boolean            @map("has_price")
+  calculationVersion   CalculationVersion @relation(fields: [calculationVersionId], references: [id], onDelete: Cascade)
+  product              Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([calculationVersionId, lineNumber])
+  @@index([productId])
+  @@index([productCode])
+  @@index([catalogVisible])
+  @@map("calculation_items")
+}
+
+model CalculationCustomer {
+  calculationVersionId String             @map("calculation_version_id") @db.Char(36)
+  customerId           String             @map("customer_id") @db.Char(36)
+  linkedByUserId       String             @map("linked_by_user_id") @db.Char(36)
+  customerCodeSnapshot String?            @map("customer_code_snapshot") @db.VarChar(20)
+  customerNameSnapshot String?            @map("customer_name_snapshot") @db.VarChar(180)
+  classIdSnapshot      String?            @map("class_id_snapshot") @db.Char(36)
+  classCodeSnapshot    String?            @map("class_code_snapshot") @db.VarChar(64)
+  classNameSnapshot    String?            @map("class_name_snapshot") @db.VarChar(100)
+  createdAt            DateTime           @default(now()) @map("created_at") @db.DateTime(3)
+  calculationVersion   CalculationVersion @relation(fields: [calculationVersionId], references: [id], onDelete: Cascade)
+  customer             Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  linkedBy             User               @relation("CalculationCustomerLinker", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+
+  @@id([calculationVersionId, customerId])
+  @@index([customerId])
+  @@index([linkedByUserId])
+  @@map("calculation_customers")
+}

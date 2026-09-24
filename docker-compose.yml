@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: fluair
+      MYSQL_USER: fluair
+      MYSQL_PASSWORD: fluair_local
+      MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+    ports:
+      - '3306:3306'
+    volumes:
+      - fluair_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u fluair -pfluair_local --silent']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  fluair_mysql_data:
