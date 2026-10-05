@@ -9,6 +9,7 @@ export const PERMISSIONS = [
   'user.view',
   'user.manage',
   'order.access',
+  'order.price-approval.manage',
   'price.view',
   'price.override',
   'customer.view',

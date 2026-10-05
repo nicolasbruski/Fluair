@@ -280,6 +280,13 @@ function historyEntry(version: CalculationHistoryItem): HTMLDivElement {
       'reference-price',
       `${money(version.minimumTotal)} (mín.) · ${money(version.normalTotal)} (máx.)`,
     ),
+    node(
+      'div',
+      'order-source last-order-price',
+      version.lastOrderPrice
+        ? `Último pedido desta versão: ${money(version.lastOrderPrice.unitPrice)} · ${version.lastOrderPrice.customer?.code ?? 'Cliente'} · ${version.lastOrderPrice.customer?.legalName ?? ''} · ${version.lastOrderPrice.orderNumber} · ${dateTime(version.lastOrderPrice.orderedAt)}`
+        : 'Último pedido desta versão: ainda não vendida',
+    ),
   );
   const photo = createMediaImage({
     image: version.image,

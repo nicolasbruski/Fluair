@@ -58,3 +58,6 @@ recorte; ela deverá ser definida junto ao modelo definitivo de pedidos.
 O nome do cliente na tabela abre “Itens vinculados”. A consulta usa
 `GET /api/v1/customers/:id/calculation-links` e mostra cada kit/cálculo associado, versão, lista,
 classe fotografada, autor e data do vínculo, além dos itens da composição com quantidades e preços.
+Cada vínculo mostra também o último preço unitário negociado em um pedido `SUBMITTED` daquele
+cliente para a versão exata do cálculo, com número e data do pedido. Quando ainda não houve venda,
+a interface informa explicitamente que o kit não foi vendido.

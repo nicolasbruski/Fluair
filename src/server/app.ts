@@ -22,6 +22,8 @@ import { createCustomersRouter } from './modules/customers/customers.routes.js';
 import type { CustomersService } from './modules/customers/customers.service.js';
 import { createOrdersRouter } from './modules/orders/orders.routes.js';
 import type { OrdersService } from './modules/orders/orders.service.js';
+import { createOrderPriceApprovalsRouter } from './modules/order-price-approvals/order-price-approvals.routes.js';
+import type { OrderPriceApprovalsService } from './modules/order-price-approvals/order-price-approvals.service.js';
 import { createMediaRouter } from './modules/media/media.routes.js';
 import type { MediaService } from './modules/media/media.service.js';
 import { createPriceListsRouter } from './modules/price-lists/price-lists.routes.js';
@@ -37,6 +39,7 @@ export interface AppDependencies {
   catalogService?: CatalogService;
   customersService?: CustomersService;
   ordersService?: OrdersService;
+  orderPriceApprovalsService?: OrderPriceApprovalsService;
   priceListsService?: PriceListsService;
   standaloneProductsService?: StandaloneProductsService;
   calculationsService?: CalculationsService;
@@ -52,6 +55,7 @@ export function createApp({
   catalogService,
   customersService,
   ordersService,
+  orderPriceApprovalsService,
   priceListsService,
   standaloneProductsService,
   calculationsService,
@@ -144,6 +148,12 @@ export function createApp({
   }
   if (usersService) app.use('/api/v1/users', createUsersRouter(authService, usersService));
   if (ordersService) app.use('/api/v1/orders', createOrdersRouter(authService, ordersService));
+  if (orderPriceApprovalsService) {
+    app.use(
+      '/api/v1/order-price-approvals',
+      createOrderPriceApprovalsRouter(authService, orderPriceApprovalsService),
+    );
+  }
   if (priceListsService)
     app.use(
       '/api/v1/price-lists',

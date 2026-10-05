@@ -1,14 +1,23 @@
 import { Router } from 'express';
 
+import type { AuthenticatedUser } from '../../../shared/auth.js';
+import { getRequestId } from '../../middleware/request-context.js';
 import { requireAdministrator, requirePermission } from '../auth/auth.middleware.js';
 import type { AuthService } from '../auth/auth.service.js';
 import {
   eligibleOrderPriceListsQuerySchema,
+  createOrderSchema,
+  idempotencyKeySchema,
   orderCatalogQuerySchema,
   orderQuoteSchema,
+  orderIdParamsSchema,
   orderSavedCatalogQuerySchema,
   savedCatalogItemParamsSchema,
   updateSavedCatalogItemSchema,
+  orderDraftSwapSchema,
+  orderDraftSaveSchema,
+  deleteOrderDraftQuerySchema,
+  orderLastSalePricesSchema,
 } from './orders.schemas.js';
 import type { OrdersService } from './orders.service.js';
 
@@ -58,12 +67,100 @@ export function createOrdersRouter(auth: AuthService, orders: OrdersService): Ro
       res.status(200).json(await orders.catalog(query));
     },
   );
+  router.get(
+    '/draft',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (_req, res) => {
+      res.status(200).json(await orders.draft(res.locals.authenticatedUser as AuthenticatedUser));
+    },
+  );
+  router.post(
+    '/draft/swap',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      res
+        .status(200)
+        .json(
+          await orders.swapDraft(
+            orderDraftSwapSchema.parse(req.body),
+            res.locals.authenticatedUser as AuthenticatedUser,
+          ),
+        );
+    },
+  );
+  router.put(
+    '/draft',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      res
+        .status(200)
+        .json(
+          await orders.saveDraft(
+            orderDraftSaveSchema.parse(req.body),
+            res.locals.authenticatedUser as AuthenticatedUser,
+          ),
+        );
+    },
+  );
+  router.delete(
+    '/draft',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      const { customerId } = deleteOrderDraftQuerySchema.parse(req.query);
+      await orders.deleteDraft(customerId, res.locals.authenticatedUser as AuthenticatedUser);
+      res.status(204).end();
+    },
+  );
+  router.post(
+    '/last-sale-prices',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      res.status(200).json(await orders.lastSalePrices(orderLastSalePricesSchema.parse(req.body)));
+    },
+  );
   router.post(
     '/quote',
     requirePermission(auth, 'order.access'),
     requirePermission(auth, 'price.view'),
     async (req, res) => {
-      res.status(200).json(await orders.quote(orderQuoteSchema.parse(req.body)));
+      res
+        .status(200)
+        .json(
+          await orders.quote(
+            orderQuoteSchema.parse(req.body),
+            res.locals.authenticatedUser as AuthenticatedUser,
+          ),
+        );
+    },
+  );
+  router.post(
+    '/',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      const result = await orders.create(
+        createOrderSchema.parse(req.body),
+        idempotencyKeySchema.parse(req.header('Idempotency-Key')),
+        res.locals.authenticatedUser as AuthenticatedUser,
+        getRequestId(req),
+      );
+      res.status(result.data.replayed ? 200 : 201).json(result);
+    },
+  );
+  router.get(
+    '/:id',
+    requirePermission(auth, 'order.access'),
+    requirePermission(auth, 'price.view'),
+    async (req, res) => {
+      const { id } = orderIdParamsSchema.parse(req.params);
+      res
+        .status(200)
+        .json(await orders.details(id, res.locals.authenticatedUser as AuthenticatedUser));
     },
   );
   return router;

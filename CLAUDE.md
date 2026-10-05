@@ -44,6 +44,7 @@ Documentos das telas:
 | Usuários e Permissões | `docs/telas/07-usuarios-permissoes.md` |
 | Pedidos | `docs/telas/08-pedidos.md` |
 | Clientes | `docs/telas/09-clientes.md` |
+| Aprovações de preço | `docs/telas/11-aprovacoes-preco.md` |
 
 Se a solicitação atual do usuário contrariar este arquivo, a solicitação explícita mais recente prevalece. Registre a nova decisão no documento funcional correspondente para que as próximas migrações não usem uma regra antiga.
 
@@ -76,10 +77,25 @@ fictícios e funções do carrinho demonstrativo não chegam à aplicação gera
 histórico já consultam as fotografias persistidas dos cálculos; os geradores artificiais dessas áreas
 não chegam ao bundle.
 
-Pedidos permite selecionar cliente e lista, consultar catálogo real de kits, itens unitários
-calculados e produtos avulsos, montar carrinho misto e validar uma cotação integralmente no backend.
-Os itens calculados exibem os kits atuais aos quais pertencem. Persistência, numeração, documento,
-aprovação e envio do pedido continuam fora do escopo.
+Pedidos permite selecionar cliente e lista, consultar catálogo real, montar carrinho misto, revisar
+uma cotação autoritativa e confirmar um pedido idempotente. Pedido, itens, primeira entrega e
+auditoria são persistidos atomicamente; um worker resiliente envia o snapshot por Resend quando a
+entrega estiver habilitada. O backend detecta preços abaixo do mínimo da lista/faixa escolhida,
+cria solicitações idempotentes, oferece consulta e cancelamento ao solicitante e mantém uma fila
+administrativa com decisão concorrente e auditável. A interface cobre solicitante, badge e
+administração. Uma aprovação libera somente uma nova cotação do conteúdo exato e é consumida
+atomicamente com um único pedido e sua primeira entrega de e-mail. Documento anexado continua fora
+do escopo.
+
+O preço unitário negociado fotografado em `order_items` alimenta o último valor vendido. Pedidos
+mostra o último valor por cliente no carrinho, Clientes mostra o último valor do cliente para a
+versão vinculada e o histórico do kit mostra a última venda global de cada versão. Somente pedidos
+`SUBMITTED` participam; o dado é informativo e não substitui a referência ou o preço atual.
+
+Cada usuário possui ainda um único pedido anterior não finalizado persistido. Trocar de cliente
+salva o carrinho atual nesse slot, substituindo o anterior; voltar ao cliente salvo troca os dois
+carrinhos atomicamente. Carrinho vazio não substitui o slot e a confirmação remove o rascunho
+somente quando usuário e cliente coincidem.
 
 ## 5. Decisões de escopo já confirmadas
 
@@ -117,11 +133,14 @@ aprovação e envio do pedido continuam fora do escopo.
 
 - Montagem, catálogo real, faixas e cotação server-side estão implementados.
 - A cotação não persiste um pedido.
-- A geração definitiva do pedido ainda será definida.
-- O formato do documento ainda será definido.
-- O provedor e o endereço de e-mail remetente serão decididos depois.
-- O envio por e-mail não faz parte do primeiro escopo.
-- Não criar tabelas ou integrações de pedido antecipadamente sem solicitação do usuário, exceto se forem estritamente necessárias para a tela pedida.
+- A confirmação persiste snapshots imutáveis e o número `PED-AAAA-NNNNNN`.
+- O e-mail segue no corpo HTML e texto, sem documento anexado.
+- O provedor inicial é Resend; remetente e destinatários operacionais vêm do ambiente.
+- O envio é assíncrono, desabilitado por padrão, e `ACCEPTED` não significa entrega final.
+- Preço abaixo do mínimo da lista/faixa escolhida exige solicitação explícita e `price.override`.
+- A decisão exige `order.price-approval.manage`, proíbe autoaprovação e não pode ser parcial.
+- A aprovação vale para um único pedido do mesmo usuário, cliente e conteúdo; uma nova cotação é
+  obrigatória antes da confirmação.
 
 ### 5.5 Permissões
 
@@ -678,7 +697,7 @@ Seguir preferencialmente:
 7. Histórico de versões e exportação.
 8. Recálculo em massa, depois de conhecer o volume.
 9. Clientes e classificações.
-10. Montagem e cotação de Pedidos; persistência, documento e e-mail depois das decisões comerciais.
+10. Montagem, cotação, confirmação, persistência e envio assíncrono de Pedidos.
 
 Se o usuário pedir uma tela fora dessa ordem, implementar as dependências mínimas reais necessárias, mas não migrar automaticamente outras interfaces. Explicar quais fundações foram necessárias.
 
@@ -781,7 +800,7 @@ Condições desse marco:
   imagem histórica;
 - Busca, Detalhes, Calcular, Produtos e Pedidos usam referências de imagem leves, e as exportações
   PDF/XLSX incorporam a foto da versão;
-- nenhuma cotação persiste pedido antes da definição do modelo definitivo.
+- nenhuma cotação persiste pedido antes da confirmação explícita.
 
 ## 22. Implantação
 
@@ -836,11 +855,9 @@ Não decidir silenciosamente:
 - possibilidade de tornar atual um cálculo com itens sem preço;
 - recálculo usando composição salva ou exigindo nova folha Korp;
 - permissão para visualizar tabela mínima e normal separadamente;
-- política de preço negociado;
 - itens que podem ser vendidos separadamente;
 - necessidade futura de CPF/CNPJ, endereço e contatos adicionais de clientes;
-- formato e estados do pedido;
-- provedor, remetente e fluxo de e-mail;
+- webhook e observação de entrega/bounce (a primeira versão termina em `ACCEPTED`/`FAILED`);
 - retenção do arquivo Excel original.
 
 Quando uma dessas decisões for necessária para a tela solicitada, apresentar opções e impacto de forma objetiva antes de implementar.

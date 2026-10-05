@@ -42,6 +42,7 @@ describe('transformPrototype', () => {
       'matriz',
       'clientes',
       'usuarios',
+      'aprovacoes',
     ]) {
       expect(transformed).toContain(`id="s-${screen}"`);
     }
@@ -65,6 +66,10 @@ describe('transformPrototype', () => {
     expect(transformed).toContain('id="pedidoClienteOptions" role="listbox"');
     expect(transformed).toContain('id="order-price-lists"');
     expect(transformed).toContain('id="order-drawer-list"');
+    expect(transformed).toContain('id="order-approvals-list"');
+    expect(transformed).toContain('id="order-approvals-reload"');
+    expect(transformed).toContain('Minhas solicitações');
+    expect(transformed).toContain('.order-cart-row.has-exception');
     expect(transformed).toContain(
       '.order-drawer-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 18px 24px;',
     );
@@ -107,6 +112,12 @@ describe('transformPrototype', () => {
     expect(transformed).not.toMatch(/\.customers-table th:nth-child\(\d+\)\{width:/);
     expect(transformed).toContain('href="/clientes"');
     expect(transformed).toContain('href="/listas"');
+    expect(transformed).toContain('href="/aprovacoes/precos"');
+    expect(transformed).toContain('data-permissions="order.price-approval.manage"');
+    expect(transformed).toContain('id="admin-approvals-badge"');
+    expect(transformed).toContain('id="admin-approvals-filters"');
+    expect(transformed).toContain('id="admin-approval-detail-modal"');
+    expect(transformed).toContain('id="admin-approval-decision-modal"');
     expect(transformed).toContain('id="price-lists-content"');
     expect(transformed).toContain('id="calc-matrices-open"');
     expect(transformed).toContain('id="calc-gear-status"');

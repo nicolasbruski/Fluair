@@ -18,10 +18,13 @@ function workbook(rows: unknown[][]): Buffer {
   return Buffer.from(XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) as Uint8Array);
 }
 
-function upload(): UploadedSpreadsheet {
+function upload(reference: string | null = 'REF-KIT-01'): UploadedSpreadsheet {
   return {
     buffer: workbook([
-      ['Cód. Interno: 130001 Descrição: KIT TESTE'],
+      [
+        'Cód. Interno: 130001 Descrição: KIT TESTE',
+        ...(reference ? ['Referência:', reference] : []),
+      ],
       [],
       ['Ope.', 'Condição', 'Cód. Produto', 'Descrição Produto', '', 'Qtde.', 'UM'],
       ['001', 'P', '12345', 'COMPONENTE A', '', 2.5, 'UN'],
@@ -136,6 +139,19 @@ describe('cálculo com lista dinâmica', () => {
           hasPrice: true,
         },
       ],
+      orderItems: [
+        {
+          negotiatedUnitPrice: new Prisma.Decimal('4990.0000'),
+          order: {
+            id: '80000000-0000-4000-8000-000000000001',
+            number: 'PED-2026-000123',
+            submittedAt: new Date('2026-10-02T15:00:00.000Z'),
+            customerId: '40000000-0000-4000-8000-000000000001',
+            customerCodeSnapshot: 'C01619',
+            customerNameSnapshot: 'Expresso Figueiredo',
+          },
+        },
+      ],
     };
     const historical = {
       ...stored,
@@ -175,7 +191,16 @@ describe('cálculo com lista dinâmica', () => {
     expect(history.data).toMatchObject({
       priceList: { id: listId },
       versions: [
-        { id: stored.id, version: 2, priceListVersion: 7 },
+        {
+          id: stored.id,
+          version: 2,
+          priceListVersion: 7,
+          lastOrderPrice: {
+            unitPrice: '4990.0000',
+            orderNumber: 'PED-2026-000123',
+            customer: { code: 'C01619' },
+          },
+        },
         { id: historical.id, version: 1, priceListVersion: 7 },
       ],
     });
@@ -307,6 +332,8 @@ describe('cálculo com lista dinâmica', () => {
     );
 
     expect(result.data.preview).toMatchObject({
+      kitReference: 'REF-KIT-01',
+      warnings: [],
       priceList: {
         id: listId,
         code: 'DYNAMIC_LIST',
@@ -323,6 +350,24 @@ describe('cálculo com lista dinâmica', () => {
       hasPrice: false,
       minimumTotal: 0,
       normalTotal: 0,
+    });
+  });
+
+  it('avisa quando a folha Korp não possui referência sem bloquear a prévia', async () => {
+    const result = await new CalculationsService(prismaForPreview(activeList())).preview(
+      listId,
+      upload(null),
+    );
+
+    expect(result.data.preview).toMatchObject({
+      kitReference: null,
+      warnings: [
+        {
+          severity: 'WARNING',
+          code: 'KIT_REFERENCE_NOT_FOUND',
+          message: 'Não foi possível coletar o valor da referência do documento.',
+        },
+      ],
     });
   });
 
@@ -643,6 +688,11 @@ describe('cálculo com lista dinâmica', () => {
     expect(transaction.kit.updateMany).toHaveBeenCalledWith({
       where: { id: 'kit-1', currentImageId: null },
       data: { currentImageId: '70000000-0000-4000-8000-000000000001' },
+    });
+    expect(transaction.kit.upsert).toHaveBeenCalledWith({
+      where: { code: '130001' },
+      update: { description: 'KIT TESTE', reference: 'REF-KIT-01' },
+      create: { code: '130001', description: 'KIT TESTE', reference: 'REF-KIT-01' },
     });
   });
 });

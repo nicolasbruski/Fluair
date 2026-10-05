@@ -27,9 +27,10 @@ seus dados demonstrativos antes de gerar o bundle.
 | [05-historico-versoes.md](05-historico-versoes.md) | Histórico de cálculos e versões | Parte da primeira migração funcional |
 | [06-atualizacao-matriz.md](06-atualizacao-matriz.md) | Administração e importação de listas | Implementada |
 | [07-usuarios-permissoes.md](07-usuarios-permissoes.md) | Administração de usuários e acessos | Restrita a usuários autorizados |
-| [08-pedidos.md](08-pedidos.md) | Montagem e cotação do carrinho | Implementada sem persistência do pedido |
+| [08-pedidos.md](08-pedidos.md) | Montagem, rascunho único e cotação do carrinho | Implementada |
 | [09-clientes.md](09-clientes.md) | Cadastro e classificação de clientes reais | Implementada |
 | [10-produtos.md](10-produtos.md) | Catálogo unificado e gestão de fotos | Implementada |
+| [11-aprovacoes-preco.md](11-aprovacoes-preco.md) | Fila e decisão de exceções abaixo do mínimo | Implementada |
 
 ## Escopo confirmado
 
@@ -38,8 +39,10 @@ seus dados demonstrativos antes de gerar o bundle.
 - Produtos e kits serão formados a partir dos cálculos executados pelos usuários.
 - Pedidos consome cálculos e listas avulsas versionadas; não usa lista fixa no JavaScript.
 - O cadastro de clientes usa a base real migrada do sistema de comissões e não depende de dados no navegador.
-- A finalização de pedidos será concluída posteriormente.
-- O envio de pedidos por e-mail será definido em uma etapa futura, depois da regra de geração do pedido.
+- A finalização de pedidos persiste pedido, itens, entrega e auditoria de forma idempotente.
+- Preços abaixo do mínimo passam por aprovação auditável antes da nova cotação e confirmação.
+- O envio de pedidos por e-mail usa fila persistente e permanece desabilitado por padrão até a
+  configuração do provedor.
 - Todas as telas internas exigirão autenticação.
 - O acesso às telas e ações será controlado por permissões. Somente usuários autorizados poderão administrar todo o sistema.
 

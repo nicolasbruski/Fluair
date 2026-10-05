@@ -1,12 +1,21 @@
 import type {
   EligibleOrderPriceListsEnvelope,
+  CreateOrderEnvelope,
+  CreateOrderInput,
   OrderCatalogEnvelope,
   OrderQuoteEnvelope,
   OrderQuoteInput,
+  OrderDetailsEnvelope,
   OrderSavedCatalogEnvelope,
   SavedKitCompositionEnvelope,
   SavedCatalogMutationEnvelope,
   UpdateSavedCatalogItemInput,
+  OrderDraftEnvelope,
+  OrderDraftSwapEnvelope,
+  OrderDraftSwapInput,
+  OrderDraftSaveInput,
+  OrderLastSalePricesEnvelope,
+  OrderLastSalePricesInput,
 } from '../../shared/orders.js';
 import { apiRequest } from './api.js';
 
@@ -79,4 +88,51 @@ export function quoteOrder(input: OrderQuoteInput): Promise<OrderQuoteEnvelope> 
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export function loadLastSalePrices(
+  input: OrderLastSalePricesInput,
+): Promise<OrderLastSalePricesEnvelope> {
+  return apiRequest<OrderLastSalePricesEnvelope>('/api/v1/orders/last-sale-prices', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function createOrder(
+  input: CreateOrderInput,
+  idempotencyKey: string,
+): Promise<CreateOrderEnvelope> {
+  return apiRequest<CreateOrderEnvelope>('/api/v1/orders', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify(input),
+  });
+}
+
+export function loadOrder(id: string): Promise<OrderDetailsEnvelope> {
+  return apiRequest<OrderDetailsEnvelope>(`/api/v1/orders/${encodeURIComponent(id)}`);
+}
+
+export function loadOrderDraft(): Promise<OrderDraftEnvelope> {
+  return apiRequest<OrderDraftEnvelope>('/api/v1/orders/draft');
+}
+
+export function swapOrderDraft(input: OrderDraftSwapInput): Promise<OrderDraftSwapEnvelope> {
+  return apiRequest<OrderDraftSwapEnvelope>('/api/v1/orders/draft/swap', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function saveOrderDraft(input: OrderDraftSaveInput): Promise<OrderDraftEnvelope> {
+  return apiRequest<OrderDraftEnvelope>('/api/v1/orders/draft', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteOrderDraft(customerId?: string): Promise<void> {
+  const query = customerId ? `?${new URLSearchParams({ customerId }).toString()}` : '';
+  return apiRequest<void>(`/api/v1/orders/draft${query}`, { method: 'DELETE' });
 }

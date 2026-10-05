@@ -48,7 +48,7 @@ describe('parser de planilhas de preço', () => {
   it('lê a folha Korp mantendo a estrutura usada pelo cálculo legado', () => {
     const result = parseProcessWorkbook(
       workbook([
-        ['Cód. Interno: 130001 Descrição: KIT TESTE'],
+        ['Cód. Interno: 130001 Descrição: KIT TESTE', '', 'Referência:', 'REF-KIT-01'],
         [],
         ['Ope.', 'Condição', 'Cód. Produto', 'Descrição Produto', '', 'Qtde.', 'UM'],
         ['001', 'P', '12345', 'COMPONENTE A', '', 2.5, 'UN'],
@@ -58,10 +58,23 @@ describe('parser de planilhas de preço', () => {
 
     expect(result.kitCode).toBe('130001');
     expect(result.kitDescription).toContain('KIT TESTE');
+    expect(result.kitReference).toBe('REF-KIT-01');
     expect(result.items).toEqual([
       expect.objectContaining({ code: '12345', quantity: 2.5, unit: 'UN' }),
       expect.objectContaining({ code: '678901', quantity: 3.5, operation: '002' }),
     ]);
+  });
+
+  it('mantém a referência opcional quando o rótulo não existe na folha Korp', () => {
+    const result = parseProcessWorkbook(
+      workbook([
+        ['Cód. Interno: 130001 Descrição: KIT SEM REFERÊNCIA'],
+        ['Ope.', 'Condição', 'Cód. Produto', 'Descrição Produto', '', 'Qtde.', 'UM'],
+        ['001', 'P', '12345', 'COMPONENTE A', '', 1, 'UN'],
+      ]),
+    );
+
+    expect(result.kitReference).toBeNull();
   });
 
   it('lê preços brasileiros, preserva a linha original e rejeita códigos duplicados', () => {

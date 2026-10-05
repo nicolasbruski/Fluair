@@ -39,6 +39,7 @@ Os nomes e a composição final dos papéis ainda devem ser confirmados. A imple
 | `user.view` | Consultar usuários e permissões |
 | `user.manage` | Criar, editar, desativar e alterar permissões |
 | `order.access` | Acessar a montagem e cotação de pedidos |
+| `order.price-approval.manage` | Consultar e decidir solicitações de exceção de preço |
 | `price.view` | Visualizar catálogo e valores na montagem de pedidos |
 | `price.override` | Informar preço negociado diferente da referência |
 | `customer.view` | Selecionar, consultar e exportar clientes |

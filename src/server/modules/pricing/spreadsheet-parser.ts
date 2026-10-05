@@ -17,6 +17,7 @@ export interface ProcessItem {
 export interface ProcessSheet {
   kitCode: string;
   kitDescription: string;
+  kitReference: string | null;
   items: ProcessItem[];
 }
 
@@ -140,6 +141,7 @@ export function parseProcessWorkbook(buffer: Buffer): ProcessSheet {
   let headerRow = -1;
   let kitCode = '';
   let kitDescription = '';
+  let kitReference: string | null = null;
   let operationColumn = 0;
   let conditionColumn = 1;
   let codeColumn = 2;
@@ -149,6 +151,24 @@ export function parseProcessWorkbook(buffer: Buffer): ProcessSheet {
 
   for (let index = 0; index < source.length; index += 1) {
     const row = source[index] ?? [];
+    if (!kitReference) {
+      for (let column = 0; column < row.length; column += 1) {
+        const value = cellText(row[column]).replace(/\n/g, ' ').trim();
+        const label = normalized(value);
+        if (!/^(?:(?:cod|codigo)\.?\s*(?:da\s*)?)?referencia\b/.test(label)) continue;
+
+        const inlineValue = value
+          .replace(/^(?:(?:c[oó]d(?:igo)?\.?\s*(?:da\s*)?)?refer[eê]ncia)\s*[:-]?\s*/i, '')
+          .trim();
+        const adjacentValue = row
+          .slice(column + 1)
+          .map((candidate) => cellText(candidate).replace(/\n/g, ' ').trim())
+          .find(Boolean);
+        const reference = (inlineValue || adjacentValue || '').replace(/\s+/g, ' ').slice(0, 120);
+        if (reference) kitReference = reference;
+        break;
+      }
+    }
     if (index < 8) {
       const joined = row.map((value) => cellText(value).replace(/\n/g, ' ').trim()).join(' ');
       const codeMatch = joined
@@ -159,7 +179,7 @@ export function parseProcessWorkbook(buffer: Buffer): ProcessSheet {
       const descriptionMatch = joined
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .match(/descricao:?\s*(.+)/i);
+        .match(/descricao:?\s*(.+?)(?=\s+(?:(?:cod|codigo)\.?\s*(?:da\s*)?)?referencia\b|$)/i);
       if (descriptionMatch?.[1] && !kitDescription) {
         kitDescription = descriptionMatch[1].trim().replace(/\s+/g, ' ').slice(0, 255);
       }
@@ -218,7 +238,7 @@ export function parseProcessWorkbook(buffer: Buffer): ProcessSheet {
       'Nenhum produto válido foi encontrado na folha Korp.',
     );
   }
-  return { kitCode, kitDescription, items };
+  return { kitCode, kitDescription, kitReference, items };
 }
 
 interface HeaderColumns {

@@ -175,6 +175,17 @@ export class PrismaCustomersRepository implements CustomersRepository {
                 current: true,
                 kitDescription: true,
                 series: { select: { kit: { select: { code: true } }, priceList: true } },
+                orderItems: {
+                  where: { order: { customerId: id, status: 'SUBMITTED' } },
+                  orderBy: [{ order: { submittedAt: 'desc' } }, { lineNumber: 'desc' }],
+                  take: 1,
+                  select: {
+                    negotiatedUnitPrice: true,
+                    order: {
+                      select: { id: true, number: true, submittedAt: true },
+                    },
+                  },
+                },
                 items: {
                   orderBy: { lineNumber: 'asc' },
                   select: {
@@ -206,6 +217,14 @@ export class PrismaCustomersRepository implements CustomersRepository {
         className: link.classNameSnapshot,
         linkedAt: link.createdAt.toISOString(),
         linkedBy: link.linkedBy.name,
+        lastOrderPrice: link.calculationVersion.orderItems[0]
+          ? {
+              unitPrice: link.calculationVersion.orderItems[0].negotiatedUnitPrice.toFixed(4),
+              orderId: link.calculationVersion.orderItems[0].order.id,
+              orderNumber: link.calculationVersion.orderItems[0].order.number,
+              orderedAt: link.calculationVersion.orderItems[0].order.submittedAt.toISOString(),
+            }
+          : null,
         items: link.calculationVersion.items.map((item) => ({
           id: item.id,
           code: item.productCode,

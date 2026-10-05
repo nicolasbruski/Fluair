@@ -364,6 +364,24 @@ export class CalculationsService {
         priceListVersion: { select: { version: true } },
         createdBy: { select: { name: true } },
         kitImage: { select: { id: true, width: true, height: true, createdAt: true } },
+        orderItems: {
+          where: { order: { status: 'SUBMITTED' } },
+          orderBy: [{ order: { submittedAt: 'desc' } }, { lineNumber: 'desc' }],
+          take: 1,
+          select: {
+            negotiatedUnitPrice: true,
+            order: {
+              select: {
+                id: true,
+                number: true,
+                submittedAt: true,
+                customerId: true,
+                customerCodeSnapshot: true,
+                customerNameSnapshot: true,
+              },
+            },
+          },
+        },
       },
     });
     const first = versions[0];
@@ -391,6 +409,19 @@ export class CalculationsService {
           createdAt: version.createdAt.toISOString(),
           createdBy: version.createdBy.name,
           image: latestCalculationImage(version.kitImage, version.series.kit.currentImage),
+          lastOrderPrice: version.orderItems?.[0]
+            ? {
+                unitPrice: version.orderItems[0].negotiatedUnitPrice.toFixed(4),
+                orderId: version.orderItems[0].order.id,
+                orderNumber: version.orderItems[0].order.number,
+                orderedAt: version.orderItems[0].order.submittedAt.toISOString(),
+                customer: {
+                  id: version.orderItems[0].order.customerId,
+                  code: version.orderItems[0].order.customerCodeSnapshot,
+                  legalName: version.orderItems[0].order.customerNameSnapshot,
+                },
+              }
+            : null,
         })),
       },
     };
@@ -473,6 +504,17 @@ export class CalculationsService {
       preview: {
         kitCode: process.kitCode,
         kitDescription: process.kitDescription,
+        kitReference: process.kitReference,
+        warnings: process.kitReference
+          ? []
+          : [
+              {
+                severity: 'WARNING',
+                code: 'KIT_REFERENCE_NOT_FOUND',
+                message: 'Não foi possível coletar o valor da referência do documento.',
+                field: 'kitReference',
+              },
+            ],
         priceList: {
           id: list.id,
           code: list.code,
@@ -572,8 +614,15 @@ export class CalculationsService {
 
         const kit = await transaction.kit.upsert({
           where: { code: computed.process.kitCode },
-          update: { description: computed.process.kitDescription },
-          create: { code: computed.process.kitCode, description: computed.process.kitDescription },
+          update: {
+            description: computed.process.kitDescription,
+            ...(computed.process.kitReference ? { reference: computed.process.kitReference } : {}),
+          },
+          create: {
+            code: computed.process.kitCode,
+            description: computed.process.kitDescription,
+            reference: computed.process.kitReference,
+          },
         });
         if (
           options.expectedKitImageId !== undefined &&

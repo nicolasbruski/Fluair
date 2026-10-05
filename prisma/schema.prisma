@@ -8,23 +8,27 @@ datasource db {
 }
 
 model User {
-  id                  String                   @id @default(uuid()) @db.Char(36)
-  name                String                   @db.VarChar(120)
-  email               String                   @unique @db.VarChar(254)
-  passwordHash        String                   @map("password_hash") @db.VarChar(255)
-  roleId              String                   @map("role_id") @db.Char(36)
-  active              Boolean                  @default(true)
-  createdAt           DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
-  role                Role                     @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  sessions            Session[]
-  permissionOverrides UserPermissionOverride[]
-  auditLogs           AuditLog[]               @relation("AuditActor")
-  importedMatrices    PriceMatrixVersion[]     @relation("MatrixImporter")
-  importedPriceLists  PriceListVersion[]       @relation("PriceListImporter")
-  calculations        CalculationVersion[]     @relation("CalculationCreator")
-  customerLinks       CalculationCustomer[]    @relation("CalculationCustomerLinker")
-  mediaAssets         MediaAsset[]             @relation("MediaAssetCreator")
+  id                      String                      @id @default(uuid()) @db.Char(36)
+  name                    String                      @db.VarChar(120)
+  email                   String                      @unique @db.VarChar(254)
+  passwordHash            String                      @map("password_hash") @db.VarChar(255)
+  roleId                  String                      @map("role_id") @db.Char(36)
+  active                  Boolean                     @default(true)
+  createdAt               DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt               DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+  role                    Role                        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  sessions                Session[]
+  permissionOverrides     UserPermissionOverride[]
+  auditLogs               AuditLog[]                  @relation("AuditActor")
+  importedMatrices        PriceMatrixVersion[]        @relation("MatrixImporter")
+  importedPriceLists      PriceListVersion[]          @relation("PriceListImporter")
+  calculations            CalculationVersion[]        @relation("CalculationCreator")
+  customerLinks           CalculationCustomer[]       @relation("CalculationCustomerLinker")
+  mediaAssets             MediaAsset[]                @relation("MediaAssetCreator")
+  orders                  Order[]                     @relation("OrderCreator")
+  requestedPriceApprovals OrderPriceApprovalRequest[] @relation("PriceApprovalRequester")
+  reviewedPriceApprovals  OrderPriceApprovalRequest[] @relation("PriceApprovalReviewer")
+  orderDraft              OrderDraft?
 
   @@index([roleId])
   @@index([active])
@@ -125,25 +129,28 @@ model AuditLog {
 }
 
 model Customer {
-  id                String                @id @default(uuid()) @db.Char(36)
-  code              String                @unique @db.VarChar(20)
-  legalName         String                @map("legal_name") @db.VarChar(180)
-  cnpj              String?               @db.Char(14)
-  city              String?               @db.VarChar(120)
-  state             String?               @db.Char(2)
-  segment           String?               @db.VarChar(80)
-  customerClassId   String?               @map("customer_class_id") @db.Char(36)
-  customerSegmentId String?               @map("customer_segment_id") @db.Char(36)
-  seller            String?               @db.VarChar(120)
-  representative    String?               @db.VarChar(120)
-  internalNote      String?               @map("internal_note") @db.Text
-  orderNote         String?               @map("order_note") @db.Text
-  active            Boolean               @default(true)
-  createdAt         DateTime              @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime              @updatedAt @map("updated_at") @db.DateTime(3)
-  customerClass     CustomerClass?        @relation(fields: [customerClassId], references: [id], onDelete: Restrict)
-  customerSegment   CustomerSegment?      @relation(fields: [customerSegmentId], references: [id], onDelete: Restrict)
-  calculationLinks  CalculationCustomer[]
+  id                    String                      @id @default(uuid()) @db.Char(36)
+  code                  String                      @unique @db.VarChar(20)
+  legalName             String                      @map("legal_name") @db.VarChar(180)
+  cnpj                  String?                     @db.Char(14)
+  city                  String?                     @db.VarChar(120)
+  state                 String?                     @db.Char(2)
+  segment               String?                     @db.VarChar(80)
+  customerClassId       String?                     @map("customer_class_id") @db.Char(36)
+  customerSegmentId     String?                     @map("customer_segment_id") @db.Char(36)
+  seller                String?                     @db.VarChar(120)
+  representative        String?                     @db.VarChar(120)
+  internalNote          String?                     @map("internal_note") @db.Text
+  orderNote             String?                     @map("order_note") @db.Text
+  active                Boolean                     @default(true)
+  createdAt             DateTime                    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime                    @updatedAt @map("updated_at") @db.DateTime(3)
+  customerClass         CustomerClass?              @relation(fields: [customerClassId], references: [id], onDelete: Restrict)
+  customerSegment       CustomerSegment?            @relation(fields: [customerSegmentId], references: [id], onDelete: Restrict)
+  calculationLinks      CalculationCustomer[]
+  orders                Order[]
+  priceApprovalRequests OrderPriceApprovalRequest[]
+  orderDrafts           OrderDraft[]
 
   @@index([active])
   @@index([legalName])
@@ -210,6 +217,7 @@ model PriceList {
   activeVersion        PriceListVersion?      @relation("ActivePriceListVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
   versions             PriceListVersion[]     @relation("PriceListVersions")
   calculationSeries    KitCalculationSeries[]
+  approvalItems        OrderApprovalItem[]
 
   @@index([type, active])
   @@map("price_lists")
@@ -232,6 +240,8 @@ model PriceListVersion {
   importedBy       User                 @relation("PriceListImporter", fields: [importedByUserId], references: [id], onDelete: Restrict)
   items            PriceListItem[]
   calculations     CalculationVersion[] @relation("CalculationPriceListVersion")
+  orderItems       OrderItem[]
+  approvalItems    OrderApprovalItem[]
 
   @@unique([priceListId, version])
   @@unique([priceListId, fileHash])
@@ -340,16 +350,18 @@ model PriceMatrixItem {
 }
 
 model Product {
-  id               String            @id @default(uuid()) @db.Char(36)
-  code             String            @unique @db.VarChar(32)
-  description      String            @db.VarChar(255)
-  reference        String?           @db.VarChar(120)
-  unit             String?           @db.VarChar(30)
-  currentImageId   String?           @map("current_image_id") @db.Char(36)
-  firstSeenAt      DateTime          @default(now()) @map("first_seen_at") @db.DateTime(3)
-  lastSeenAt       DateTime          @default(now()) @map("last_seen_at") @db.DateTime(3)
-  currentImage     MediaAsset?       @relation("ProductCurrentImage", fields: [currentImageId], references: [id], onDelete: Restrict)
+  id               String              @id @default(uuid()) @db.Char(36)
+  code             String              @unique @db.VarChar(32)
+  description      String              @db.VarChar(255)
+  reference        String?             @db.VarChar(120)
+  unit             String?             @db.VarChar(30)
+  currentImageId   String?             @map("current_image_id") @db.Char(36)
+  firstSeenAt      DateTime            @default(now()) @map("first_seen_at") @db.DateTime(3)
+  lastSeenAt       DateTime            @default(now()) @map("last_seen_at") @db.DateTime(3)
+  currentImage     MediaAsset?         @relation("ProductCurrentImage", fields: [currentImageId], references: [id], onDelete: Restrict)
   calculationItems CalculationItem[]
+  orderItems       OrderItem[]
+  approvalItems    OrderApprovalItem[]
 
   @@index([currentImageId])
   @@map("products")
@@ -366,6 +378,8 @@ model Kit {
   currentImage      MediaAsset?            @relation("KitCurrentImage", fields: [currentImageId], references: [id], onDelete: Restrict)
   priceLists        KitPriceList[]
   calculationSeries KitCalculationSeries[]
+  orderItems        OrderItem[]
+  approvalItems     OrderApprovalItem[]
 
   @@index([currentImageId])
   @@index([reference])
@@ -464,6 +478,8 @@ model CalculationVersion {
   kitImage               MediaAsset?           @relation("CalculationKitImage", fields: [kitImageId], references: [id], onDelete: Restrict)
   items                  CalculationItem[]
   customers              CalculationCustomer[]
+  orderItems             OrderItem[]
+  approvalItems          OrderApprovalItem[]
 
   @@unique([priceListId, version])
   @@unique([kitCalculationSeriesId, version])
@@ -525,4 +541,276 @@ model CalculationCustomer {
   @@index([customerId])
   @@index([linkedByUserId])
   @@map("calculation_customers")
+}
+
+enum OrderStatus {
+  SUBMITTED
+  CANCELLED
+}
+
+enum OrderItemKind {
+  STANDALONE_PRODUCT
+  KIT
+}
+
+enum OrderEmailDeliveryStatus {
+  PENDING
+  PROCESSING
+  ACCEPTED
+  DELIVERED
+  FAILED
+  BOUNCED
+}
+
+enum OrderPriceApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  SUPERSEDED
+  EXPIRED
+  CONSUMED
+}
+
+model OrderNumberSequence {
+  year       Int      @id @db.UnsignedSmallInt
+  lastNumber Int      @default(0) @map("last_number") @db.UnsignedInt
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("order_number_sequences")
+}
+
+model OrderDraft {
+  id         String   @id @db.Char(36)
+  userId     String   @unique @map("user_id") @db.Char(36)
+  customerId String   @map("customer_id") @db.Char(36)
+  payload    Json
+  revision   Int      @default(1) @db.UnsignedInt
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([updatedAt])
+  @@map("order_drafts")
+}
+
+model Order {
+  id                          String                     @id @db.Char(36)
+  number                      String                     @unique @db.VarChar(20)
+  status                      OrderStatus                @default(SUBMITTED)
+  customerId                  String                     @map("customer_id") @db.Char(36)
+  customerCodeSnapshot        String                     @map("customer_code_snapshot") @db.VarChar(20)
+  customerNameSnapshot        String                     @map("customer_name_snapshot") @db.VarChar(180)
+  customerTaxIdSnapshot       String?                    @map("customer_tax_id_snapshot") @db.Char(14)
+  customerCitySnapshot        String?                    @map("customer_city_snapshot") @db.VarChar(120)
+  customerStateSnapshot       String?                    @map("customer_state_snapshot") @db.Char(2)
+  customerClassIdSnapshot     String?                    @map("customer_class_id_snapshot") @db.Char(36)
+  customerClassCodeSnapshot   String?                    @map("customer_class_code_snapshot") @db.VarChar(64)
+  customerClassNameSnapshot   String?                    @map("customer_class_name_snapshot") @db.VarChar(100)
+  customerSegmentIdSnapshot   String?                    @map("customer_segment_id_snapshot") @db.Char(36)
+  customerSegmentCodeSnapshot String?                    @map("customer_segment_code_snapshot") @db.VarChar(64)
+  customerSegmentNameSnapshot String?                    @map("customer_segment_name_snapshot") @db.VarChar(100)
+  createdByUserId             String                     @map("created_by_user_id") @db.Char(36)
+  createdByNameSnapshot       String                     @map("created_by_name_snapshot") @db.VarChar(120)
+  createdByEmailSnapshot      String                     @map("created_by_email_snapshot") @db.VarChar(254)
+  note                        String?                    @db.Text
+  totalQuantity               Decimal                    @map("total_quantity") @db.Decimal(15, 4)
+  totalAmount                 Decimal                    @map("total_amount") @db.Decimal(25, 4)
+  idempotencyKey              String                     @map("idempotency_key") @db.VarChar(128)
+  contentHash                 String                     @map("content_hash") @db.Char(64)
+  submittedAt                 DateTime                   @map("submitted_at") @db.DateTime(3)
+  createdAt                   DateTime                   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                   DateTime                   @updatedAt @map("updated_at") @db.DateTime(3)
+  customer                    Customer                   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy                   User                       @relation("OrderCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items                       OrderItem[]
+  emailDeliveries             OrderEmailDelivery[]
+  priceApprovalRequest        OrderPriceApprovalRequest?
+
+  @@unique([createdByUserId, idempotencyKey])
+  @@index([customerId, submittedAt])
+  @@index([createdByUserId, submittedAt])
+  @@index([status, submittedAt])
+  @@map("orders")
+}
+
+model OrderPriceApprovalRequest {
+  id                          String                   @id @db.Char(36)
+  status                      OrderPriceApprovalStatus @default(PENDING)
+  requestedByUserId           String                   @map("requested_by_user_id") @db.Char(36)
+  requestedByNameSnapshot     String                   @map("requested_by_name_snapshot") @db.VarChar(120)
+  requestedByEmailSnapshot    String                   @map("requested_by_email_snapshot") @db.VarChar(254)
+  customerId                  String                   @map("customer_id") @db.Char(36)
+  customerCodeSnapshot        String                   @map("customer_code_snapshot") @db.VarChar(20)
+  customerNameSnapshot        String                   @map("customer_name_snapshot") @db.VarChar(180)
+  customerClassIdSnapshot     String?                  @map("customer_class_id_snapshot") @db.Char(36)
+  customerClassCodeSnapshot   String?                  @map("customer_class_code_snapshot") @db.VarChar(64)
+  customerClassNameSnapshot   String?                  @map("customer_class_name_snapshot") @db.VarChar(100)
+  customerSegmentIdSnapshot   String?                  @map("customer_segment_id_snapshot") @db.Char(36)
+  customerSegmentCodeSnapshot String?                  @map("customer_segment_code_snapshot") @db.VarChar(64)
+  customerSegmentNameSnapshot String?                  @map("customer_segment_name_snapshot") @db.VarChar(100)
+  justification               String                   @db.VarChar(2000)
+  contentHash                 String                   @map("content_hash") @db.Char(64)
+  hashVersion                 Int                      @map("hash_version") @db.UnsignedSmallInt
+  totalQuantity               Decimal                  @map("total_quantity") @db.Decimal(15, 4)
+  minimumTotalAmount          Decimal                  @map("minimum_total_amount") @db.Decimal(25, 4)
+  requestedTotalAmount        Decimal                  @map("requested_total_amount") @db.Decimal(25, 4)
+  exceptionAmount             Decimal                  @map("exception_amount") @db.Decimal(25, 4)
+  idempotencyKey              String                   @map("idempotency_key") @db.VarChar(128)
+  requestedAt                 DateTime                 @map("requested_at") @db.DateTime(3)
+  reviewedByUserId            String?                  @map("reviewed_by_user_id") @db.Char(36)
+  reviewedByNameSnapshot      String?                  @map("reviewed_by_name_snapshot") @db.VarChar(120)
+  reviewedByEmailSnapshot     String?                  @map("reviewed_by_email_snapshot") @db.VarChar(254)
+  reviewNote                  String?                  @map("review_note") @db.VarChar(2000)
+  reviewedAt                  DateTime?                @map("reviewed_at") @db.DateTime(3)
+  approvedUntil               DateTime?                @map("approved_until") @db.DateTime(3)
+  consumedOrderId             String?                  @unique @map("consumed_order_id") @db.Char(36)
+  consumedAt                  DateTime?                @map("consumed_at") @db.DateTime(3)
+  version                     Int                      @default(1) @db.UnsignedInt
+  createdAt                   DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt                   DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+  requestedBy                 User                     @relation("PriceApprovalRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedBy                  User?                    @relation("PriceApprovalReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  customer                    Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  consumedOrder               Order?                   @relation(fields: [consumedOrderId], references: [id], onDelete: Restrict)
+  items                       OrderApprovalItem[]
+
+  @@unique([requestedByUserId, idempotencyKey], map: "opar_requester_idempotency_uq")
+  @@index([status, requestedAt])
+  @@index([status, approvedUntil])
+  @@index([requestedByUserId, status, requestedAt], map: "opar_requester_status_requested_idx")
+  @@index([customerId, requestedAt])
+  @@index([reviewedByUserId, reviewedAt], map: "opar_reviewer_reviewed_idx")
+  @@index([contentHash])
+  @@map("order_price_approval_requests")
+}
+
+model OrderApprovalItem {
+  id                               String                    @id @db.Char(36)
+  approvalRequestId                String                    @map("approval_request_id") @db.Char(36)
+  lineNumber                       Int                       @map("line_number") @db.UnsignedSmallInt
+  kind                             OrderItemKind
+  requiresApproval                 Boolean                   @map("requires_approval")
+  sourceProductId                  String?                   @map("source_product_id") @db.Char(36)
+  sourceKitId                      String?                   @map("source_kit_id") @db.Char(36)
+  sourceCalculationVersionId       String?                   @map("source_calculation_version_id") @db.Char(36)
+  sourcePriceListId                String                    @map("source_price_list_id") @db.Char(36)
+  sourcePriceListVersionId         String                    @map("source_price_list_version_id") @db.Char(36)
+  sourcePriceListCodeSnapshot      String                    @map("source_price_list_code_snapshot") @db.VarChar(64)
+  sourcePriceListNameSnapshot      String                    @map("source_price_list_name_snapshot") @db.VarChar(120)
+  sourcePriceListTypeSnapshot      String                    @map("source_price_list_type_snapshot") @db.VarChar(40)
+  sourcePriceListVersionSnapshot   Int                       @map("source_price_list_version_snapshot") @db.UnsignedInt
+  sourceCalculationVersionSnapshot Int?                      @map("source_calculation_version_snapshot") @db.UnsignedInt
+  minimumOrderQuantitySnapshot     Int?                      @map("minimum_order_quantity_snapshot") @db.UnsignedInt
+  maximumOrderQuantitySnapshot     Int?                      @map("maximum_order_quantity_snapshot") @db.UnsignedInt
+  priceReferenceSnapshot           String                    @map("price_reference_snapshot") @db.VarChar(20)
+  codeSnapshot                     String                    @map("code_snapshot") @db.VarChar(32)
+  descriptionSnapshot              String                    @map("description_snapshot") @db.VarChar(255)
+  referenceSnapshot                String?                   @map("reference_snapshot") @db.VarChar(120)
+  unitSnapshot                     String?                   @map("unit_snapshot") @db.VarChar(30)
+  quantity                         Decimal                   @db.Decimal(15, 4)
+  referenceUnitPrice               Decimal                   @map("reference_unit_price") @db.Decimal(15, 4)
+  minimumUnitPrice                 Decimal                   @map("minimum_unit_price") @db.Decimal(15, 4)
+  negotiatedUnitPrice              Decimal                   @map("negotiated_unit_price") @db.Decimal(15, 4)
+  minimumSubtotal                  Decimal                   @map("minimum_subtotal") @db.Decimal(25, 4)
+  negotiatedSubtotal               Decimal                   @map("negotiated_subtotal") @db.Decimal(25, 4)
+  exceptionUnitAmount              Decimal                   @map("exception_unit_amount") @db.Decimal(15, 4)
+  exceptionTotalAmount             Decimal                   @map("exception_total_amount") @db.Decimal(25, 4)
+  ipiRate                          Decimal?                  @map("ipi_rate") @db.Decimal(7, 4)
+  icmsRate                         Decimal?                  @map("icms_rate") @db.Decimal(7, 4)
+  createdAt                        DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
+  approvalRequest                  OrderPriceApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict)
+  sourceProduct                    Product?                  @relation(fields: [sourceProductId], references: [id], onDelete: Restrict)
+  sourceKit                        Kit?                      @relation(fields: [sourceKitId], references: [id], onDelete: Restrict)
+  sourceCalculationVersion         CalculationVersion?       @relation(fields: [sourceCalculationVersionId], references: [id], onDelete: Restrict)
+  sourcePriceList                  PriceList                 @relation(fields: [sourcePriceListId], references: [id], onDelete: Restrict)
+  sourcePriceListVersion           PriceListVersion          @relation(fields: [sourcePriceListVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([approvalRequestId, lineNumber])
+  @@index([sourceProductId])
+  @@index([sourceKitId])
+  @@index([sourceCalculationVersionId])
+  @@index([sourcePriceListId])
+  @@index([sourcePriceListVersionId])
+  @@map("order_price_approval_items")
+}
+
+model OrderItem {
+  id                               String              @id @db.Char(36)
+  orderId                          String              @map("order_id") @db.Char(36)
+  lineNumber                       Int                 @map("line_number") @db.UnsignedSmallInt
+  kind                             OrderItemKind
+  sourceProductId                  String?             @map("source_product_id") @db.Char(36)
+  sourceKitId                      String?             @map("source_kit_id") @db.Char(36)
+  sourceCalculationVersionId       String?             @map("source_calculation_version_id") @db.Char(36)
+  sourcePriceListVersionId         String?             @map("source_price_list_version_id") @db.Char(36)
+  sourcePriceListIdSnapshot        String              @map("source_price_list_id_snapshot") @db.Char(36)
+  sourcePriceListCodeSnapshot      String              @map("source_price_list_code_snapshot") @db.VarChar(64)
+  sourcePriceListNameSnapshot      String              @map("source_price_list_name_snapshot") @db.VarChar(120)
+  sourcePriceListTypeSnapshot      String              @map("source_price_list_type_snapshot") @db.VarChar(40)
+  sourcePriceListVersionSnapshot   Int                 @map("source_price_list_version_snapshot") @db.UnsignedInt
+  sourceCalculationVersionSnapshot Int?                @map("source_calculation_version_snapshot") @db.UnsignedInt
+  priceReferenceSnapshot           String              @map("price_reference_snapshot") @db.VarChar(20)
+  codeSnapshot                     String              @map("code_snapshot") @db.VarChar(32)
+  descriptionSnapshot              String              @map("description_snapshot") @db.VarChar(255)
+  referenceSnapshot                String?             @map("reference_snapshot") @db.VarChar(120)
+  unitSnapshot                     String?             @map("unit_snapshot") @db.VarChar(30)
+  quantity                         Decimal             @db.Decimal(15, 4)
+  referenceUnitPrice               Decimal             @map("reference_unit_price") @db.Decimal(15, 4)
+  negotiatedUnitPrice              Decimal             @map("negotiated_unit_price") @db.Decimal(15, 4)
+  minimumReferencePrice            Decimal?            @map("minimum_reference_price") @db.Decimal(15, 4)
+  normalReferencePrice             Decimal?            @map("normal_reference_price") @db.Decimal(15, 4)
+  ipiRate                          Decimal?            @map("ipi_rate") @db.Decimal(7, 4)
+  icmsRate                         Decimal?            @map("icms_rate") @db.Decimal(7, 4)
+  subtotal                         Decimal             @db.Decimal(25, 4)
+  createdAt                        DateTime            @default(now()) @map("created_at") @db.DateTime(3)
+  order                            Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sourceProduct                    Product?            @relation(fields: [sourceProductId], references: [id], onDelete: Restrict)
+  sourceKit                        Kit?                @relation(fields: [sourceKitId], references: [id], onDelete: Restrict)
+  sourceCalculationVersion         CalculationVersion? @relation(fields: [sourceCalculationVersionId], references: [id], onDelete: Restrict)
+  sourcePriceListVersion           PriceListVersion?   @relation(fields: [sourcePriceListVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, lineNumber])
+  @@index([sourceProductId])
+  @@index([sourceKitId])
+  @@index([sourceCalculationVersionId])
+  @@index([sourcePriceListVersionId])
+  @@map("order_items")
+}
+
+model OrderEmailDelivery {
+  id                   String                   @id @db.Char(36)
+  orderId              String                   @map("order_id") @db.Char(36)
+  status               OrderEmailDeliveryStatus @default(PENDING)
+  toRecipients         Json                     @map("to_recipients")
+  fromAddress          String                   @map("from_address") @db.VarChar(254)
+  fromName             String?                  @map("from_name") @db.VarChar(120)
+  replyTo              String?                  @map("reply_to") @db.VarChar(254)
+  templateVersion      String                   @map("template_version") @db.VarChar(32)
+  idempotencyKey       String                   @unique @map("idempotency_key") @db.VarChar(128)
+  contentHash          String                   @map("content_hash") @db.Char(64)
+  provider             String?                  @db.VarChar(64)
+  providerMessageId    String?                  @map("provider_message_id") @db.VarChar(255)
+  attemptCount         Int                      @default(0) @map("attempt_count") @db.UnsignedSmallInt
+  nextAttemptAt        DateTime                 @map("next_attempt_at") @db.DateTime(3)
+  reservationToken     String?                  @map("reservation_token") @db.VarChar(64)
+  processingStartedAt  DateTime?                @map("processing_started_at") @db.DateTime(3)
+  reservationExpiresAt DateTime?                @map("reservation_expires_at") @db.DateTime(3)
+  publicError          String?                  @map("public_error") @db.VarChar(255)
+  technicalErrorCode   String?                  @map("technical_error_code") @db.VarChar(80)
+  acceptedAt           DateTime?                @map("accepted_at") @db.DateTime(3)
+  deliveredAt          DateTime?                @map("delivered_at") @db.DateTime(3)
+  failedAt             DateTime?                @map("failed_at") @db.DateTime(3)
+  bouncedAt            DateTime?                @map("bounced_at") @db.DateTime(3)
+  createdAt            DateTime                 @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt            DateTime                 @updatedAt @map("updated_at") @db.DateTime(3)
+  order                Order                    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@index([status, reservationExpiresAt])
+  @@index([orderId, createdAt])
+  @@index([provider, providerMessageId])
+  @@map("order_email_deliveries")
 }

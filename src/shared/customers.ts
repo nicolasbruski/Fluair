@@ -1,3 +1,5 @@
+import type { LastOrderPrice } from './last-order-price.js';
+
 export interface CustomerClass {
   id: string;
   code: string;
@@ -129,6 +131,7 @@ export interface CustomerCalculationLink {
   className: string | null;
   linkedAt: string;
   linkedBy: string;
+  lastOrderPrice: LastOrderPrice | null;
   items: CustomerCalculationItemLink[];
 }
 

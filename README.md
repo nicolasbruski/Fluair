@@ -2,14 +2,16 @@
 
 Aplicação Node.js/TypeScript migrada gradualmente a partir de
 `fluair-tabpreco-merge-pedidos.html`. Login, usuários, clientes, listas de preço, cálculo e o recorte
-de montagem/cotação de Pedidos usam APIs reais protegidas por permissões. A fonte HTML continua
+de montagem, cotação, aprovação comercial e confirmação de Pedidos usam APIs reais protegidas por
+permissões. A fonte HTML continua
 como referência visual, mas sua transformação remove dados e comportamentos demonstrativos das
 áreas migradas antes de gerar o bundle.
 
 Clientes possuem classe e segmento normalizados. Listas `KIT_COMPONENT` e
 `STANDALONE_PRODUCT` compartilham versionamento, importação com prévia e administração dinâmica. O
 cálculo de kits e a cotação do carrinho são refeitos no backend com aritmética decimal. Pedidos
-ainda não são persistidos, numerados, exportados nem enviados.
+confirmados são numerados e persistidos com snapshots imutáveis; o envio por e-mail ocorre por uma
+fila persistente e não bloqueia nem desfaz o registro comercial.
 
 ## Requisitos
 
@@ -100,14 +102,61 @@ de situação geram eventos em `audit_logs`. A exportação da tela gera CSV UTF
 - `GET /api/v1/price-lists/:id/products/:code/price` — resolve preço decimal, referência, IPI e ICMS informativos da versão ativa.
 - `GET /api/v1/orders/price-lists` — retorna listas avulsas permitidas para cliente e quantidade;
 - `GET /api/v1/orders/catalog` — retorna produtos da versão ativa e kits compatíveis;
-- `POST /api/v1/orders/quote` — recalcula e valida integralmente o carrinho sem persistir pedido.
+- `POST /api/v1/orders/quote` — recalcula o carrinho, resolve destinatários e cria uma revisão curta sem persistir;
+- `POST /api/v1/orders` — confirma a revisão com `Idempotency-Key` e grava pedido, itens, entrega e auditoria;
+- `GET /api/v1/orders/:id` — retorna snapshot e entregas ao criador ou a um administrador.
+- `POST /api/v1/order-price-approvals` — solicita, com justificativa, uma exceção para o carrinho completo;
+- `GET /api/v1/order-price-approvals/mine` e `GET /api/v1/order-price-approvals/:id` — listam e detalham somente as solicitações do usuário autenticado;
+- `POST /api/v1/order-price-approvals/:id/cancel` — cancela uma solicitação própria ainda pendente;
+- `GET /api/v1/order-price-approvals/admin/count` e `GET /api/v1/order-price-approvals/admin` — alimentam o badge e a fila administrativa;
+- `GET /api/v1/order-price-approvals/admin/:id`, `POST .../:id/approve` e `POST .../:id/reject` — detalham e decidem a solicitação com controle concorrente.
 
 Os uploads usam corpo binário com limite de 10 MB. Arquivo, hash e linhas normalizadas ficam
 persistidos em versões imutáveis. A administração usa `matrix.view`/`matrix.manage`; o cálculo usa
-`calculation.create`; e catálogo e cotação exigem `order.access` e `price.view`. O preço permanece no
+`calculation.create`; catálogo e cotação exigem `order.access` e `price.view`. Preço negociado
+divergente exige `price.override`, e a fila/decisão administrativa exige
+`order.price-approval.manage`. O preço permanece no
 item da versão, enquanto `products` guarda somente a identidade conhecida mais recente. A API
 legada `/api/v1/matrices`, limitada aos três perfis iniciais, foi removida; tabelas e escritas duplas
 históricas permanecem temporariamente para compatibilidade e rollback.
+
+### Aprovação de preço abaixo do mínimo
+
+O mínimo de produto avulso é o `unitPrice` da versão, lista e faixa escolhidas; uma lista ou faixa
+mais barata não autoriza a linha atual. Kits usam o mínimo da versão de cálculo validada. Quando o
+valor negociado fica abaixo desse mínimo, a cotação não cria pedido nem entrega de e-mail: o
+solicitante envia uma justificativa e acompanha o estado em **Minhas solicitações**.
+
+Administradores autorizados recebem o contador por polling e decidem pela rota
+`/aprovacoes/precos`. Autoaprovação é proibida, a primeira decisão concorrente prevalece e uma
+aprovação vale por sete dias por padrão (`ORDER_PRICE_APPROVAL_VALIDITY_DAYS`) para o usuário,
+cliente e conteúdo exatos. Depois da aprovação é obrigatória uma nova cotação. A confirmação cria
+pedido, itens e entrega, consome a aprovação e grava auditoria na mesma transação; repetir a mesma
+confirmação idempotente retorna o pedido existente.
+
+### Envio de pedidos por e-mail
+
+O worker roda no processo da API e consulta a fila MySQL. Por padrão,
+`EMAIL_DELIVERY_ENABLED=false`: pedidos são registrados e as entregas permanecem `PENDING`, sem
+contato de rede. Para o piloto, configure `EMAIL_PROVIDER=resend`, `EMAIL_API_KEY`, um `EMAIL_FROM`
+autorizado, `ORDER_NOTIFICATION_RECIPIENTS=nicolasbruski7@gmail.com` e, fora de produção, uma
+`EMAIL_ALLOWLIST` restrita. `EMAIL_REPLY_TO` é opcional.
+
+`PENDING` aguarda processamento, `PROCESSING` está reservado, `ACCEPTED` foi aceito pelo provedor e
+`FAILED` esgotou tentativas ou recebeu erro permanente. Nesta versão não há webhook: `ACCEPTED` não
+significa entrega ou leitura. O worker tenta no máximo cinco vezes e recupera reservas vencidas.
+
+Operação segura:
+
+- pausar: definir `EMAIL_DELIVERY_ENABLED=false` e reiniciar; pedidos e pendências ficam preservados;
+- identificar falhas: consultar `GET /api/v1/orders/:id` e logs por `orderId`/`deliveryId`;
+- retomar: corrigir configuração/provedor e reabilitar o worker; pendências voltam automaticamente;
+- trocar o destinatário: alterar `ORDER_NOTIFICATION_RECIPIENTS` para os pedidos futuros;
+- rotacionar chave: pausar, trocar `EMAIL_API_KEY`, validar remetente/allowlist e reabilitar;
+- rollback: não remover tabelas nem apagar entregas; desabilitar o worker e reverter só a aplicação.
+
+Implante primeiro com envio desabilitado, aplique a migration, valide criação e renderização em
+ambiente controlado e somente então habilite o piloto. Não versione credenciais nem corpos de e-mail.
 
 ## Fotos de produtos e kits
 

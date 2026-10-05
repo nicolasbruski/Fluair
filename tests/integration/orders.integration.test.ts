@@ -69,7 +69,25 @@ function setup(permissions: string[], roleCode: string = ROLE_CODES.calculationO
     updateSavedCatalogItem: vi.fn().mockResolvedValue({ data: { updated: true } }),
     deleteSavedCatalogItem: vi.fn().mockResolvedValue(undefined),
     catalog: vi.fn().mockResolvedValue({ data: { products: [], kits: [] }, pagination: {} }),
+    lastSalePrices: vi.fn().mockResolvedValue({ data: { prices: [] } }),
     quote: vi.fn().mockResolvedValue({ data: { lines: [], total: '0.0000' } }),
+    create: vi.fn().mockResolvedValue({
+      data: {
+        order: { id: savedItemId, number: 'PED-2026-000001', status: 'SUBMITTED' },
+        emailDelivery: { id: customerId, status: 'PENDING', recipients: [] },
+        replayed: false,
+      },
+    }),
+    details: vi.fn().mockResolvedValue({
+      data: {
+        order: { id: savedItemId, number: 'PED-2026-000001', status: 'SUBMITTED' },
+        emailDeliveries: [{ id: customerId, status: 'ACCEPTED' }],
+      },
+    }),
+    draft: vi.fn().mockResolvedValue({ data: { draft: null } }),
+    saveDraft: vi.fn().mockResolvedValue({ data: { draft: null } }),
+    swapDraft: vi.fn().mockResolvedValue({ data: { restored: null, draft: null } }),
+    deleteDraft: vi.fn().mockResolvedValue(undefined),
   };
   const app = createApp({
     config,
@@ -91,6 +109,94 @@ async function agentFor(context: ReturnType<typeof setup>) {
 }
 
 describe('API de fontes do pedido', () => {
+  it('isola o slot de rascunho pelo usuário autenticado e exige acesso a preços', async () => {
+    const denied = setup(['order.access']);
+    await (await agentFor(denied)).get('/api/v1/orders/draft').expect(403);
+    expect(denied.orders.draft).not.toHaveBeenCalled();
+
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent.get('/api/v1/orders/draft').expect(200);
+    expect(context.orders.draft).toHaveBeenCalledWith(
+      expect.objectContaining({ id: context.user.id }),
+    );
+  });
+
+  it('valida e encaminha a troca atômica do único pedido salvo', async () => {
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent
+      .post('/api/v1/orders/draft/swap')
+      .set('Origin', config.APP_URL)
+      .send({
+        targetCustomerId: priceListId,
+        current: {
+          customerId,
+          payload: {
+            note: 'Pedido anterior',
+            cart: [
+              {
+                key: `product:P-01:${savedItemId}`,
+                kind: 'STANDALONE_PRODUCT',
+                code: 'P-01',
+                description: 'Produto',
+                price: 12.5,
+                taxRate: 5,
+                referencePrice: 13,
+                priceEdited: true,
+                priceReference: 'UNIT',
+                source: 'Lista v1',
+                sourceVersionId: savedItemId,
+                quantity: 2,
+                image: null,
+              },
+            ],
+          },
+        },
+      })
+      .expect(200);
+    expect(context.orders.swapDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ targetCustomerId: priceListId }),
+      expect.objectContaining({ id: context.user.id }),
+    );
+  });
+
+  it('salva o pedido atual antes de remover o cliente da tela', async () => {
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent
+      .put('/api/v1/orders/draft')
+      .set('Origin', config.APP_URL)
+      .send({
+        customerId,
+        payload: {
+          note: 'Pedido salvo ao fechar o cliente',
+          cart: [
+            {
+              key: `product:P-01:${savedItemId}`,
+              kind: 'STANDALONE_PRODUCT',
+              code: 'P-01',
+              description: 'Produto',
+              price: 12.5,
+              taxRate: 5,
+              referencePrice: 13,
+              priceEdited: true,
+              priceReference: 'UNIT',
+              source: 'Lista v1',
+              sourceVersionId: savedItemId,
+              quantity: 2,
+              image: null,
+            },
+          ],
+        },
+      })
+      .expect(200);
+    expect(context.orders.saveDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId }),
+      expect.objectContaining({ id: context.user.id }),
+    );
+  });
+
   it('exige order.access para consultar listas autorizadas', async () => {
     const context = setup(['price.view']);
     const agent = await agentFor(context);
@@ -207,17 +313,72 @@ describe('API de fontes do pedido', () => {
         ],
       })
       .expect(200);
-    expect(context.orders.quote).toHaveBeenCalledWith({
-      customerId,
-      lines: [
-        {
-          kind: 'STANDALONE_PRODUCT',
-          productCode: 'P-01',
-          priceListVersionId: savedItemId,
-          quantity: 2,
-        },
-      ],
-    });
+    expect(context.orders.quote).toHaveBeenCalledWith(
+      {
+        customerId,
+        lines: [
+          {
+            kind: 'STANDALONE_PRODUCT',
+            productCode: 'P-01',
+            priceListVersionId: savedItemId,
+            quantity: 2,
+          },
+        ],
+      },
+      expect.objectContaining({ id: context.user.id, email: context.user.email }),
+    );
+  });
+
+  it('so cria o pedido na confirmacao final e encaminha a chave idempotente', async () => {
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent
+      .post('/api/v1/orders')
+      .set('Origin', config.APP_URL)
+      .set('Idempotency-Key', 'order:1234567890abcdef')
+      .send({
+        customerId,
+        lines: [
+          {
+            kind: 'STANDALONE_PRODUCT',
+            productCode: 'P-01',
+            priceListVersionId: savedItemId,
+            quantity: 2,
+            negotiatedUnitPrice: '12.5000',
+          },
+        ],
+        note: 'Entregar de manha',
+        quoteToken: 'x'.repeat(40),
+        approvalRequestId: priceListId,
+      })
+      .expect(201);
+    expect(context.orders.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId,
+        note: 'Entregar de manha',
+        approvalRequestId: priceListId,
+      }),
+      'order:1234567890abcdef',
+      expect.objectContaining({ id: context.user.id }),
+      expect.any(String),
+    );
+  });
+
+  it('consulta um pedido com as duas permissoes e encaminha o usuario autenticado', async () => {
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent.get(`/api/v1/orders/${savedItemId}`).expect(200);
+    expect(context.orders.details).toHaveBeenCalledWith(
+      savedItemId,
+      expect.objectContaining({ id: context.user.id }),
+    );
+  });
+
+  it('nao permite consultar detalhes sem acesso a precos', async () => {
+    const context = setup(['order.access']);
+    const agent = await agentFor(context);
+    await agent.get(`/api/v1/orders/${savedItemId}`).expect(403);
+    expect(context.orders.details).not.toHaveBeenCalled();
   });
 
   it('valida e encaminha cliente, lista, quantidade, busca e paginação', async () => {
@@ -250,5 +411,39 @@ describe('API de fontes do pedido', () => {
       .get(`/api/v1/orders/catalog?customerId=${customerId}&priceListId=${priceListId}&quantity=0`)
       .expect(400);
     expect(context.orders.catalog).toHaveBeenCalledOnce();
+  });
+
+  it('protege e valida a consulta em lote dos últimos preços', async () => {
+    const denied = setup(['order.access']);
+    await (
+      await agentFor(denied)
+    )
+      .post('/api/v1/orders/last-sale-prices')
+      .set('Origin', config.APP_URL)
+      .send({ customerId, lines: [] })
+      .expect(403);
+    expect(denied.orders.lastSalePrices).not.toHaveBeenCalled();
+
+    const context = setup(['order.access', 'price.view']);
+    await (
+      await agentFor(context)
+    )
+      .post('/api/v1/orders/last-sale-prices')
+      .set('Origin', config.APP_URL)
+      .send({
+        customerId,
+        lines: [
+          {
+            key: 'kit:1',
+            kind: 'KIT',
+            calculationId: savedItemId,
+          },
+        ],
+      })
+      .expect(200);
+    expect(context.orders.lastSalePrices).toHaveBeenCalledWith({
+      customerId,
+      lines: [{ key: 'kit:1', kind: 'KIT', calculationId: savedItemId }],
+    });
   });
 });

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { expect, test, type Page, type Route } from '@playwright/test';
 
 import type { Customer } from '../../src/shared/customers.js';
+import type { OrderDraft, OrderDraftPayload } from '../../src/shared/orders.js';
 
 const sessionUser = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -190,6 +191,12 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
                 className: 'Implementador',
                 linkedAt: '2026-09-15T12:00:00.000Z',
                 linkedBy: 'Samara',
+                lastOrderPrice: {
+                  unitPrice: '31.7500',
+                  orderId: '80000000-0000-4000-8000-000000000001',
+                  orderNumber: 'PED-2026-000123',
+                  orderedAt: '2026-10-02T15:00:00.000Z',
+                },
                 items: [
                   {
                     id: '60000000-0000-4000-8000-000000000001',
@@ -222,6 +229,16 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ data: { customer: initialCustomers[0] } }),
+      });
+      return;
+    }
+    const customerDetailMatch = pathname.match(/^\/api\/v1\/customers\/([^/]+)$/);
+    if (customerDetailMatch && request.method() === 'GET') {
+      const customer = customers.find((item) => item.id === customerDetailMatch[1]);
+      await route.fulfill({
+        status: customer ? 200 : 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { customer } }),
       });
       return;
     }
@@ -403,6 +420,90 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
       }),
     }),
   );
+  await page.route('**/api/v1/orders/last-sale-prices', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          prices: [
+            {
+              key: 'kit:50000000-0000-4000-8000-000000000001:NORMAL',
+              lastOrderPrice: {
+                unitPrice: '31.7500',
+                orderId: '80000000-0000-4000-8000-000000000001',
+                orderNumber: 'PED-2026-000123',
+                orderedAt: '2026-10-02T15:00:00.000Z',
+              },
+            },
+          ],
+        },
+      }),
+    }),
+  );
+  let orderDraft: OrderDraft | null = null;
+  let lastSavedCustomerId: string | null = null;
+  await page.route('**/api/v1/orders/draft**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname.endsWith('/draft/swap') && request.method() === 'POST') {
+      const input = request.postDataJSON() as {
+        targetCustomerId: string;
+        current?: { customerId: string; payload: OrderDraftPayload };
+      };
+      const restored = orderDraft?.customer.id === input.targetCustomerId ? orderDraft : null;
+      if (input.current) {
+        const customer = customers.find((item) => item.id === input.current!.customerId)!;
+        lastSavedCustomerId = customer.id;
+        orderDraft = {
+          id: 'd0000000-0000-4000-8000-000000000001',
+          revision: (orderDraft?.revision ?? 0) + 1,
+          customer: {
+            id: customer.id,
+            code: customer.code,
+            legalName: customer.legalName,
+            active: customer.active,
+          },
+          payload: input.current.payload,
+          updatedAt: '2026-10-02T15:00:00.000Z',
+        };
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { restored, draft: orderDraft } }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { draft: orderDraft } }),
+    });
+  });
+  await page.route('**/api/v1/orders/catalog**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { customer: null, products: [], kits: [] },
+        pagination: {
+          page: 1,
+          pageSize: 12,
+          productTotal: 0,
+          productTotalPages: 1,
+          kitTotal: 0,
+          kitTotalPages: 1,
+        },
+      }),
+    }),
+  );
+  await page.route('**/api/v1/order-price-approvals/mine**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { approvals: [] } }),
+    }),
+  );
 
   await page.goto('/clientes');
   const screen = page.locator('#s-clientes');
@@ -465,6 +566,7 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
   );
   await expect(linksModal.getByText('131507 · KIT DE FREIO')).toBeVisible();
   await expect(linksModal.getByText('16 itens')).toBeVisible();
+  await expect(linksModal.getByText(/último pedido R\$\s*31,75.*PED-2026-000123/)).toBeVisible();
   await expect
     .poll(() =>
       linksModal
@@ -506,6 +608,9 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
   );
   await expect(page.locator('#pedidoClienteTriggerLabel')).toHaveText('Expresso Figueiredo');
   await expect(page.locator('#pedidoItems')).toContainText('KIT DE FREIO');
+  await expect(page.locator('#pedidoItems .order-source')).toContainText(
+    'calculado em 15/09/2026 · último pedido R$ 31,75',
+  );
   await expect(page.locator('#order-back')).toBeVisible();
   await page.locator('#order-back').click();
   await expect(page).toHaveURL('/clientes?cliente=10000000-0000-4000-8000-000000000001&aba=kits');
@@ -515,6 +620,25 @@ test('consulta, filtra, cria, edita e desativa clientes retornados pela API', as
     'true',
   );
   await expect(linksModal.getByText(/131507.*KIT DE FREIO/)).toBeVisible();
+
+  await page.evaluate(
+    ({ customerId, calculationId }) => {
+      window.history.pushState(
+        { orderOrigin: '/clientes' },
+        '',
+        `/pedidos/novo?cliente=${customerId}&calculo=${calculationId}`,
+      );
+      (window as unknown as { show(screen: string): void }).show('pedido');
+    },
+    {
+      customerId: initialCustomers[1]!.id,
+      calculationId: '50000000-0000-4000-8000-000000000001',
+    },
+  );
+  await expect(page.locator('#pedidoClienteTriggerLabel')).toHaveText('Lider Sul Ltda');
+  await expect(page.locator('#pedidoItems')).toContainText('KIT DE FREIO');
+  await expect(page.locator('#order-saved-draft')).toContainText('Expresso Figueiredo');
+  expect(lastSavedCustomerId).toBe(initialCustomers[0]!.id);
 
   await page.goto('/clientes');
   await expect(screen).toBeVisible();

@@ -17,6 +17,7 @@ const descriptions: Record<PermissionCode, string> = {
   'user.view': 'Consultar usuários e suas permissões.',
   'user.manage': 'Criar, editar, ativar e desativar usuários e acessos.',
   'order.access': 'Acessar a montagem e cotação de pedidos.',
+  'order.price-approval.manage': 'Listar, consultar e decidir aprovações de preço de pedidos.',
   'price.view': 'Visualizar catálogo e valores na montagem de pedidos.',
   'price.override': 'Informar preço negociado.',
   'customer.view': 'Consultar, exportar e selecionar clientes.',

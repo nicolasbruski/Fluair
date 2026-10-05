@@ -1,5 +1,7 @@
 import type { PriceListTypeCode } from './pricing.js';
 import type { NullableImageReference } from './media.js';
+import type { LastOrderPrice } from './last-order-price.js';
+import type { OrderPriceViolation } from './order-price-approvals.js';
 
 export interface EligibleOrderPriceList {
   id: string;
@@ -148,18 +150,116 @@ export interface SavedCatalogMutationEnvelope {
   data: { updated: true };
 }
 
+export interface OrderDraftCartItem {
+  key: string;
+  kind: 'KIT' | 'STANDALONE_PRODUCT';
+  code: string;
+  description: string;
+  price: number;
+  taxRate: number;
+  referencePrice: number;
+  priceEdited: boolean;
+  priceReference: 'MINIMUM' | 'NORMAL' | 'UNIT';
+  source: string;
+  sourceVersionId: string;
+  priceListName?: string | undefined;
+  priceListVersion?: number | undefined;
+  minimumOrderQuantity?: number | null | undefined;
+  maximumOrderQuantity?: number | null | undefined;
+  calculatedAt?: string | undefined;
+  minimumPrice?: number | undefined;
+  normalPrice?: number | undefined;
+  priceRanges?:
+    | Array<{
+        list: string;
+        minimumPrice: number;
+        maximumPrice: number;
+        ipiRate: number;
+        icmsRate: number;
+      }>
+    | undefined;
+  ipiRate?: number | undefined;
+  icmsRate?: number | undefined;
+  calculationId?: string | undefined;
+  lastOrderPrice?: LastOrderPrice | null | undefined;
+  quantity: number;
+  image: NullableImageReference;
+}
+
+export type OrderLastSalePriceLine =
+  | { key: string; kind: 'STANDALONE_PRODUCT'; productCode: string }
+  | { key: string; kind: 'KIT'; calculationId: string };
+
+export interface OrderLastSalePricesInput {
+  customerId: string;
+  lines: OrderLastSalePriceLine[];
+}
+
+export interface OrderLastSalePricesEnvelope {
+  data: {
+    prices: Array<{ key: string; lastOrderPrice: LastOrderPrice | null }>;
+  };
+}
+
+export interface OrderDraftPayload {
+  note: string;
+  cart: OrderDraftCartItem[];
+  approvalRequestId?: string | undefined;
+}
+
+export interface OrderDraft {
+  id: string;
+  revision: number;
+  customer: {
+    id: string;
+    code: string;
+    legalName: string;
+    active: boolean;
+  };
+  payload: OrderDraftPayload;
+  updatedAt: string;
+}
+
+export interface OrderDraftEnvelope {
+  data: { draft: OrderDraft | null };
+}
+
+export interface OrderDraftSwapInput {
+  targetCustomerId: string;
+  current?:
+    | {
+        customerId: string;
+        payload: OrderDraftPayload;
+      }
+    | undefined;
+}
+
+export interface OrderDraftSaveInput {
+  customerId: string;
+  payload: OrderDraftPayload;
+}
+
+export interface OrderDraftSwapEnvelope {
+  data: {
+    restored: OrderDraft | null;
+    draft: OrderDraft | null;
+  };
+}
+
 export type OrderQuoteLineInput =
   | {
       kind: 'STANDALONE_PRODUCT';
       productCode: string;
       priceListVersionId: string;
       quantity: number;
+      negotiatedUnitPrice?: string;
     }
   | {
       kind: 'KIT';
       calculationId: string;
       priceReference: 'MINIMUM' | 'NORMAL';
       quantity: number;
+      negotiatedUnitPrice?: string;
     };
 
 export interface OrderQuoteInput {
@@ -170,12 +270,24 @@ export interface OrderQuoteInput {
 export type OrderQuoteLine =
   | {
       kind: 'STANDALONE_PRODUCT';
+      productId: string | null;
       productCode: string;
-      priceList: { id: string; code: string; name: string };
+      priceList: {
+        id: string;
+        code: string;
+        name: string;
+        minimumOrderQuantity: number | null;
+        maximumOrderQuantity: number | null;
+      };
       description: string;
       reference: string;
+      unit: string | null;
       quantity: number;
       unitPrice: string;
+      referenceUnitPrice: string;
+      negotiatedUnitPrice: string;
+      minimumReferencePrice: string;
+      normalReferencePrice: string;
       subtotal: string;
       ipiRate: string;
       ipiIncluded: true;
@@ -185,6 +297,7 @@ export type OrderQuoteLine =
     }
   | {
       kind: 'KIT';
+      kitId: string;
       calculationId: string;
       calculationVersion: number;
       code: string;
@@ -192,8 +305,19 @@ export type OrderQuoteLine =
       priceReference: 'MINIMUM' | 'NORMAL';
       quantity: number;
       unitPrice: string;
+      referenceUnitPrice: string;
+      negotiatedUnitPrice: string;
+      minimumReferencePrice: string;
+      normalReferencePrice: string;
       subtotal: string;
-      priceList: { id: string; code: string; name: string; type: 'KIT_COMPONENT' };
+      priceList: {
+        id: string;
+        code: string;
+        name: string;
+        type: 'KIT_COMPONENT';
+        minimumOrderQuantity: number | null;
+        maximumOrderQuantity: number | null;
+      };
       priceListVersion: { id: string; version: number };
       image: NullableImageReference;
     };
@@ -206,11 +330,186 @@ export interface OrderQuoteEnvelope {
       legalName: string;
       customerClassId: string | null;
       customerSegmentId: string | null;
+      customerClass: { id: string; code: string; name: string } | null;
+      customerSegment: { id: string; code: string; name: string } | null;
     };
     totalQuantity: number;
     lines: OrderQuoteLine[];
     total: string;
+    referenceTotal: string;
+    creator: { id: string; name: string; email: string } | null;
+    recipients: string[];
+    quoteToken: string;
+    approval: {
+      required: boolean;
+      violations: OrderPriceViolation[];
+    };
+    expiresAt: string;
+    differences: Array<{
+      line: number;
+      code: string;
+      referenceUnitPrice: string;
+      negotiatedUnitPrice: string;
+    }>;
     warnings: string[];
     quotedAt: string;
+  };
+}
+
+export const ORDER_STATUSES = ['SUBMITTED', 'CANCELLED'] as const;
+export type OrderStatusCode = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_EMAIL_DELIVERY_STATUSES = [
+  'PENDING',
+  'PROCESSING',
+  'ACCEPTED',
+  'DELIVERED',
+  'FAILED',
+  'BOUNCED',
+] as const;
+export type OrderEmailDeliveryStatusCode = (typeof ORDER_EMAIL_DELIVERY_STATUSES)[number];
+
+export interface OrderCustomerSnapshot {
+  id: string;
+  code: string;
+  legalName: string;
+  taxId: string | null;
+  city: string | null;
+  state: string | null;
+  customerClass: { id: string; code: string; name: string } | null;
+  customerSegment: { id: string; code: string; name: string } | null;
+}
+
+export interface OrderCreatorSnapshot {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface OrderItemSnapshot {
+  kind: 'STANDALONE_PRODUCT' | 'KIT';
+  sourceProductId: string | null;
+  sourceKitId: string | null;
+  sourceCalculationVersionId: string | null;
+  sourcePriceListVersionId: string | null;
+  priceList: {
+    id: string;
+    code: string;
+    name: string;
+    type: PriceListTypeCode;
+    version: number;
+  };
+  calculationVersion: number | null;
+  priceReference: 'UNIT' | 'MINIMUM' | 'NORMAL';
+  code: string;
+  description: string;
+  reference: string | null;
+  unit: string | null;
+  quantity: string;
+  referenceUnitPrice: string;
+  negotiatedUnitPrice: string;
+  minimumReferencePrice: string | null;
+  normalReferencePrice: string | null;
+  ipiRate: string | null;
+  icmsRate: string | null;
+  subtotal: string;
+}
+
+export interface OrderEmailDeliverySnapshot {
+  recipients: string[];
+  fromAddress: string;
+  fromName: string | null;
+  replyTo: string | null;
+  templateVersion: string;
+  idempotencyKey: string;
+  contentHash: string;
+}
+
+export interface CreateOrderSnapshot {
+  idempotencyKey: string;
+  contentHash: string;
+  customer: OrderCustomerSnapshot;
+  creator: OrderCreatorSnapshot;
+  note: string | null;
+  totalQuantity: string;
+  totalAmount: string;
+  items: OrderItemSnapshot[];
+  delivery: OrderEmailDeliverySnapshot;
+  priceApproval?: {
+    id: string;
+    expectedVersion: number;
+    contentHash: string;
+    hashVersion: number;
+  } | null;
+}
+
+export interface CreatedOrderSnapshot {
+  order: {
+    id: string;
+    number: string;
+    status: 'SUBMITTED';
+    submittedAt: string;
+  };
+  emailDelivery: {
+    id: string;
+    status: OrderEmailDeliveryStatusCode;
+    recipients: string[];
+  };
+}
+
+export type CreateOrderLineInput =
+  | (Extract<OrderQuoteLineInput, { kind: 'STANDALONE_PRODUCT' }> & {
+      negotiatedUnitPrice: string;
+    })
+  | (Extract<OrderQuoteLineInput, { kind: 'KIT' }> & { negotiatedUnitPrice: string });
+
+export interface CreateOrderInput {
+  customerId: string;
+  lines: CreateOrderLineInput[];
+  note: string;
+  quoteToken: string;
+  approvalRequestId?: string;
+}
+
+export interface CreateOrderEnvelope {
+  data: CreatedOrderSnapshot & { replayed: boolean };
+}
+
+export interface OrderDetailsEnvelope {
+  data: {
+    order: {
+      id: string;
+      number: string;
+      status: OrderStatusCode;
+      submittedAt: string;
+      customer: OrderCustomerSnapshot;
+      creator: OrderCreatorSnapshot;
+      note: string | null;
+      totalQuantity: string;
+      totalAmount: string;
+      items: OrderItemSnapshot[];
+    };
+    emailDeliveries: Array<{
+      id: string;
+      status: OrderEmailDeliveryStatusCode;
+      recipients: string[];
+      attemptCount: number;
+      publicError: string | null;
+      acceptedAt: string | null;
+      deliveredAt: string | null;
+      failedAt: string | null;
+      bouncedAt: string | null;
+      createdAt: string;
+    }>;
+    priceApproval: {
+      id: string;
+      status: 'CONSUMED';
+      requestedAt: string;
+      reviewedAt: string;
+      approvedUntil: string;
+      consumedAt: string;
+      reviewer: { id: string; name: string };
+      decisionNote: string | null;
+    } | null;
   };
 }

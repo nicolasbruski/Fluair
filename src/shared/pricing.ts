@@ -1,3 +1,4 @@
+import type { LastOrderPrice } from './last-order-price.js';
 import type { NullableImageReference } from './media.js';
 
 export const PRICE_LIST_TYPES = ['KIT_COMPONENT', 'STANDALONE_PRODUCT'] as const;
@@ -154,6 +155,8 @@ export interface ExistingCalculationSummary {
 export interface CalculationPreview {
   kitCode: string;
   kitDescription: string;
+  kitReference: string | null;
+  warnings: SpreadsheetDiagnostic[];
   priceList: {
     id: string;
     code: string;
@@ -290,6 +293,7 @@ export interface CalculationHistoryItem {
   createdAt: string;
   createdBy: string;
   image: NullableImageReference;
+  lastOrderPrice: LastOrderPrice | null;
 }
 
 export interface CalculationHistoryEnvelope {

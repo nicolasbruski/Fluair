@@ -275,6 +275,12 @@ function renderPreview(): void {
   const exportAction = currentUser?.permissions.includes('calculation.export')
     ? '<button class="btn btn-ghost btn-sm" id="calc-export" type="button">Exportar Excel</button>'
     : '';
+  const warnings = preview.warnings ?? [];
+  const warningsMarkup = warnings.length
+    ? '<div class="price-list-warning calc-reference-warning" role="status">' +
+      warnings.map(({ message }) => escapeHtml(message)).join('<br>') +
+      '</div>'
+    : '';
   element<HTMLElement>('#calc-main').innerHTML =
     '<div class="calc-preview-banner' +
     bannerClass +
@@ -286,6 +292,7 @@ function renderPreview(): void {
     '<button class="btn btn-primary btn-sm" id="calc-open-save" type="button">' +
     saveLabel +
     '</button></div></div>' +
+    warningsMarkup +
     '<div class="kitCard">' +
     imageMarkup +
     '<div class="kf"><div class="kfL">Código</div><div class="kfV code">' +
@@ -293,6 +300,9 @@ function renderPreview(): void {
     '</div></div>' +
     '<div class="kf" style="flex:1;min-width:180px"><div class="kfL">Descrição</div><div class="kfV">' +
     escapeHtml(preview.kitDescription) +
+    '</div></div>' +
+    '<div class="kf"><div class="kfL">Referência</div><div class="kfV code">' +
+    escapeHtml(preview.kitReference ?? '—') +
     '</div></div>' +
     '<div class="kf"><div class="kfL">Lista</div><div class="kfV"><span class="cTag">' +
     escapeHtml(preview.priceList.name) +

@@ -94,6 +94,8 @@ test('simula com lista dinâmica e salva somente com cliente de classe compatív
           preview: {
             kitCode: '130001',
             kitDescription: 'KIT CONDENSADOR TESTE',
+            kitReference: 'REF-KIT-01',
+            warnings: [],
             priceList: {
               id: priceListId,
               code: 'CUSTOM_DYNAMIC_LIST',
@@ -308,6 +310,7 @@ test('simula com lista dinâmica e salva somente com cliente de classe compatív
   });
   await page.locator('#calc-run').click();
   await expect(page.getByText('KIT CONDENSADOR TESTE')).toBeVisible();
+  await expect(page.locator('.kitCard')).toContainText('REF-KIT-01');
   await expect(page.locator('.tCard.min .tVal')).toHaveText('R$ 1.250,50');
   await expect(page.locator('.kitCard')).toContainText('Lista dinâmica para implementadores');
   await expect(page.locator('.kitCard')).toContainText('Implementador');

@@ -56,6 +56,16 @@ function apiMessage(error: unknown): string {
     : 'Não foi possível concluir a operação. Tente novamente.';
 }
 
+function money(value: string): string {
+  return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function shortDate(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(
+    new Date(value),
+  );
+}
+
 function setFeedback(message: string, error = false): void {
   const target = element<HTMLElement>('#customers-feedback');
   target.textContent = message;
@@ -413,7 +423,7 @@ function renderCalculationLink(link: CustomerCalculationLink): HTMLElement {
   heading.append(title, controls);
   const meta = document.createElement('div');
   meta.className = 'customer-calculation-meta';
-  meta.textContent = `${link.priceListName} · cálculo v${link.version} · vínculo em ${new Intl.DateTimeFormat('pt-BR').format(new Date(link.linkedAt))} por ${link.linkedBy}${link.className ? ` · classe ${link.className}` : ''}`;
+  meta.textContent = `${link.priceListName} · cálculo v${link.version} · vínculo em ${new Intl.DateTimeFormat('pt-BR').format(new Date(link.linkedAt))} por ${link.linkedBy}${link.className ? ` · classe ${link.className}` : ''} · ${link.lastOrderPrice ? `último pedido ${money(link.lastOrderPrice.unitPrice)} · ${link.lastOrderPrice.orderNumber} · ${shortDate(link.lastOrderPrice.orderedAt)}` : 'ainda não vendido'}`;
   summary.append(heading, meta);
   const content = document.createElement('div');
   content.className = 'customer-calculation-content';

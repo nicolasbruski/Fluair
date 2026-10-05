@@ -9,6 +9,11 @@ import { initializeProductsPage, showProductsPage } from './products-page.js';
 import { initializePriceListsPage, showPriceListsPage } from './price-lists-page.js';
 import { initializeSearchPage, showSearchPage } from './search-page.js';
 import { initializeUsersPage, showUsersPage } from './users-page.js';
+import {
+  configureAdminApprovalNotifications,
+  initializeAdminPriceApprovalsPage,
+  showAdminPriceApprovalsPage,
+} from './admin-price-approvals-page.js';
 
 declare global {
   interface Window {
@@ -32,6 +37,11 @@ const routes: RouteDefinition[] = [
   { path: '/calculos', screen: 'busca', permissions: ['calculation.view'] },
   { path: '/calculos/novo', screen: 'calc', permissions: ['calculation.create'] },
   { path: '/pedidos/novo', screen: 'pedido', permissions: ['order.access'] },
+  {
+    path: '/aprovacoes/precos',
+    screen: 'aprovacoes',
+    permissions: ['order.price-approval.manage'],
+  },
   { path: '/produtos', screen: 'produtos', permissions: ['price.view', 'catalog.manage'] },
   { path: '/clientes', screen: 'clientes', permissions: ['customer.view', 'customer.manage'] },
   { path: '/listas', screen: 'matriz', permissions: ['matrix.view', 'matrix.manage'] },
@@ -50,6 +60,7 @@ const screenPermissions = new Map<string, PermissionCode[]>([
   ['calc', ['calculation.create']],
   ['historico', ['calculation.history']],
   ['pedido', ['order.access']],
+  ['aprovacoes', ['order.price-approval.manage']],
   ['produtos', ['price.view', 'catalog.manage']],
   ['clientes', ['customer.view', 'customer.manage']],
   ['matriz', ['matrix.view', 'matrix.manage']],
@@ -152,6 +163,7 @@ function showScreen(screen: string): void {
   if (screen === 'clientes' && authenticatedUser) showCustomersPage(authenticatedUser);
   if (screen === 'matriz' && authenticatedUser) showPriceListsPage(authenticatedUser);
   if (screen === 'usuarios' && authenticatedUser) showUsersPage(authenticatedUser);
+  if (screen === 'aprovacoes' && authenticatedUser) showAdminPriceApprovalsPage(authenticatedUser);
 }
 
 window.show = (screen: string): void => {
@@ -169,6 +181,7 @@ window.show = (screen: string): void => {
 
 function enterLogin(message = ''): void {
   authenticatedUser = null;
+  configureAdminApprovalNotifications(null);
   const intended = `${window.location.pathname}${window.location.search}`;
   if (window.location.pathname !== '/login') {
     window.history.replaceState(null, '', `/login?returnTo=${encodeURIComponent(intended)}`);
@@ -281,6 +294,7 @@ async function submitLogin(event: SubmitEvent): Promise<void> {
   try {
     const response = await login(email, password);
     authenticatedUser = response.data.user;
+    configureAdminApprovalNotifications(authenticatedUser);
     const returned = safeReturnDestination(authenticatedUser);
     const destination = returned?.route ?? firstAllowedRoute(authenticatedUser);
     if (destination) navigateTo(destination, true, returned?.href);
@@ -308,6 +322,7 @@ async function performLogout(): Promise<void> {
   try {
     await logout();
     authenticatedUser = null;
+    configureAdminApprovalNotifications(null);
     window.history.replaceState(null, '', '/login');
     enterLogin();
   } catch (error) {
@@ -331,6 +346,7 @@ async function initialize(): Promise<void> {
   initializeProductsPage();
   initializePriceListsPage();
   initializeUsersPage();
+  initializeAdminPriceApprovalsPage();
   element<HTMLFormElement>('#login-form').addEventListener('submit', (event) => {
     void submitLogin(event);
   });
@@ -363,12 +379,14 @@ async function initialize(): Promise<void> {
       ...authenticatedUser,
       permissions: (event as CustomEvent<PermissionCode[]>).detail,
     };
+    configureAdminApprovalNotifications(authenticatedUser);
     updateNavigation(routeForPath(window.location.pathname)?.screen ?? null);
   });
 
   try {
     const response = await currentSession();
     authenticatedUser = response.data.user;
+    configureAdminApprovalNotifications(authenticatedUser);
     renderPath();
   } catch (error) {
     let message = '';

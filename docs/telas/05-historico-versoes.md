@@ -109,6 +109,9 @@ Durante a migração, ambas devem compartilhar a mesma fonte e regra. A recomend
 
 - `GET /api/v1/calculations/:id/history` localiza a série selecionada e retorna todas as versões persistidas.
 - O modal apresenta versão, lista utilizada, origem, data, responsável, totais e contagens reais.
+- Cada versão apresenta a última venda global vinculada exatamente àquela versão do cálculo,
+  usando o preço unitário negociado e identificando cliente, pedido e data; pedidos cancelados não
+  participam da consulta.
 - `Ver composição` abre a fotografia da versão escolhida pelo UUID.
 - A exportação de uma versão consulta o detalhe persistido e exige `calculation.export`.
 - Os geradores de versão, datas, usuários e variações artificiais foram removidos do bundle.

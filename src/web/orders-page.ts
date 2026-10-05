@@ -1,16 +1,25 @@
 import { ROLE_CODES, type AuthenticatedUser } from '../shared/auth.js';
 import type { Customer, CustomerClass, CustomerSegment } from '../shared/customers.js';
 import type { CalculationDetail } from '../shared/pricing.js';
-import type { NullableImageReference } from '../shared/media.js';
 import type {
   EligibleOrderPriceList,
+  OrderDraft,
+  OrderDraftCartItem,
   OrderKitCatalogItem,
+  OrderQuoteEnvelope,
   OrderStandaloneCatalogItem,
 } from '../shared/orders.js';
+import type {
+  MyOrderPriceApprovalDetail,
+  MyOrderPriceApprovalSummary,
+  OrderPriceViolation,
+} from '../shared/order-price-approvals.js';
 import { orderTotalQuantity } from '../shared/order-quantity.js';
 import { orderAmount, orderLineAmount } from '../shared/order-money.js';
 import { descriptionWithoutUser } from './display-text.js';
 import { createMediaImage } from './components/media-image.js';
+import { showNotification } from './notifications.js';
+import { emailDeliveryNotification } from './order-email-status.js';
 import { ApiError } from './services/api.js';
 import { getCalculation } from './services/calculations-api.js';
 import {
@@ -20,42 +29,28 @@ import {
   preRegisterCustomer,
 } from './services/customers-api.js';
 import {
+  createOrder,
   listEligibleOrderPriceLists,
+  loadOrder,
   loadOrderCatalog,
   loadSavedOrderCatalog,
+  loadOrderDraft,
+  loadLastSalePrices,
   quoteOrder,
+  saveOrderDraft,
+  swapOrderDraft,
+  deleteOrderDraft,
 } from './services/orders-api.js';
+import {
+  cancelMyOrderPriceApproval,
+  createOrderPriceApproval,
+  getMyOrderPriceApproval,
+  listMyOrderPriceApprovals,
+} from './services/order-price-approvals-api.js';
 
 type CatalogItem = OrderStandaloneCatalogItem | OrderKitCatalogItem;
 
-type CartItem = {
-  key: string;
-  kind: 'KIT' | 'STANDALONE_PRODUCT';
-  code: string;
-  description: string;
-  price: number;
-  taxRate: number;
-  referencePrice: number;
-  priceEdited: boolean;
-  priceReference: 'MINIMUM' | 'NORMAL' | 'UNIT';
-  source: string;
-  sourceVersionId: string;
-  calculatedAt?: string;
-  minimumPrice?: number;
-  normalPrice?: number;
-  priceRanges?: Array<{
-    list: string;
-    minimumPrice: number;
-    maximumPrice: number;
-    ipiRate: number;
-    icmsRate: number;
-  }>;
-  ipiRate?: number;
-  icmsRate?: number;
-  calculationId?: string;
-  quantity: number;
-  image: NullableImageReference;
-};
+type CartItem = OrderDraftCartItem;
 
 let currentUser: AuthenticatedUser | null = null;
 let customers: Customer[] = [];
@@ -67,17 +62,40 @@ let selectedCustomer: Customer | null = null;
 let priceLists: EligibleOrderPriceList[] = [];
 let selectedPriceList: EligibleOrderPriceList | null = null;
 let cart: CartItem[] = [];
+let savedDraft: OrderDraft | null = null;
+let customerSwitching = false;
+let draftSequence = 0;
+let orderContextSequence = 0;
 let customerTimer: number | undefined;
 let catalogTimer: number | undefined;
 let customerSequence = 0;
 let priceListSequence = 0;
 let catalogSequence = 0;
+let lastSalePriceSequence = 0;
+let lastSalePricesFailed = false;
 let catalogPage = 1;
 let catalogPages = 1;
 let initialized = false;
 let pendingCalculation: CalculationDetail | null = null;
 let visibleCatalogItems: CatalogItem[] = [];
 let drawerFilter: 'ALL' | 'KIT' | 'VALVE' | 'ITEM' = 'ALL';
+let activeReview: {
+  quote: OrderQuoteEnvelope['data'];
+  fingerprint: string;
+  idempotencyKey: string;
+} | null = null;
+let reviewSubmitting = false;
+let reviewFocusReturn: HTMLElement | null = null;
+let approvalSubmitting = false;
+let approvalFocusReturn: HTMLElement | null = null;
+let quotedViolations: OrderPriceViolation[] = [];
+let approvalAttempt: { fingerprint: string; idempotencyKey: string } | null = null;
+let selectedApproval: MyOrderPriceApprovalDetail | null = null;
+let supersededApprovalId: string | null = null;
+let myApprovals: MyOrderPriceApprovalSummary[] = [];
+const monitoredEmailDeliveries = new Set<string>();
+const emailDeliveryPollIntervalMs = 2_000;
+const emailDeliveryMonitorTimeoutMs = 2 * 60_000;
 
 type OrderReturnDestination = {
   href: string;
@@ -104,6 +122,9 @@ function canManageCustomers(): boolean {
 }
 function canViewPrices(): boolean {
   return Boolean(currentUser?.permissions.includes('price.view'));
+}
+function canOverridePrices(): boolean {
+  return Boolean(currentUser?.permissions.includes('price.override'));
 }
 function customerDetails(customer: Customer): string {
   const cnpj = customer.cnpj
@@ -153,15 +174,15 @@ function backToOrderOrigin(): void {
 
 function calculationCartItem(detail: CalculationDetail): CartItem {
   return {
-    key: `kit:${detail.id}:MINIMUM`,
+    key: `kit:${detail.id}:NORMAL`,
     kind: 'KIT',
     code: detail.kitCode,
     description: descriptionWithoutUser(detail.kitDescription),
-    price: Number(detail.minimumTotal),
+    price: Number(detail.normalTotal),
     taxRate: 0,
-    referencePrice: Number(detail.minimumTotal),
+    referencePrice: Number(detail.normalTotal),
     priceEdited: false,
-    priceReference: 'MINIMUM',
+    priceReference: 'NORMAL',
     source: `${detail.priceList.name} · cálculo v${detail.version} · lista v${detail.priceListVersion.version}`,
     sourceVersionId: detail.priceListVersion.id,
     calculatedAt: detail.createdAt,
@@ -185,6 +206,7 @@ async function loadPendingCalculation(id: string): Promise<void> {
     pendingCalculation = detail;
     applyPendingCalculation();
     renderCart();
+    void refreshLastSalePrices();
     if (selectedCustomer) void loadCatalog();
   } catch (error) {
     pendingCalculation = null;
@@ -192,18 +214,40 @@ async function loadPendingCalculation(id: string): Promise<void> {
   }
 }
 
-async function loadPendingCustomer(id: string): Promise<void> {
+async function loadPendingCustomer(id: string): Promise<boolean> {
   try {
     const customer = (await getCustomer(id)).data.customer;
-    if (!customer.active) throw new Error('O cliente selecionado estÃ¡ desativado.');
-    selectedCustomer = customer;
-    element<HTMLTextAreaElement>('#pedidoObs').value = customer.orderNote ?? '';
-    syncSelectedCustomer();
-    renderCustomers(customers.length);
-    renderCart();
-    await loadCatalog();
+    if (!customer.active) throw new Error('O cliente selecionado está desativado.');
+    await selectCustomer(customer);
+    return selectedCustomer?.id === customer.id;
   } catch (error) {
-    setRangeWarning(apiMessage(error, 'NÃ£o foi possÃ­vel adicionar o cliente ao pedido.'));
+    setRangeWarning(apiMessage(error, 'Não foi possível adicionar o cliente ao pedido.'));
+    return false;
+  }
+}
+
+async function loadOrderContext(
+  calculationId: string | null,
+  customerId: string | null,
+): Promise<void> {
+  const sequence = ++orderContextSequence;
+  if (customerId && selectedCustomer?.id !== customerId) {
+    const changed = await loadPendingCustomer(customerId);
+    if (sequence !== orderContextSequence) return;
+    if (!changed) return;
+  }
+  if (calculationId) {
+    if (pendingCalculation?.id !== calculationId) {
+      cart = [];
+      selectedPriceList = null;
+      renderCart();
+      await loadPendingCalculation(calculationId);
+    } else {
+      applyPendingCalculation();
+      renderCart();
+    }
+  } else {
+    pendingCalculation = null;
   }
 }
 
@@ -224,6 +268,12 @@ function setQuoteFeedback(message = '', error = false): void {
 }
 function invalidateQuote(): void {
   setQuoteFeedback();
+  quotedViolations = [];
+  approvalAttempt = null;
+  if (selectedApproval?.status === 'PENDING') supersededApprovalId = selectedApproval.id;
+  selectedApproval = null;
+  window.sessionStorage.removeItem('order-price-approval-id');
+  if (activeReview && !reviewSubmitting) closeOrderReview(false);
 }
 function money(value: number | string): string {
   return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -235,6 +285,619 @@ function percentage(value: number | string): string {
 
 function date(value: string): string {
   return new Date(value).toLocaleDateString('pt-BR');
+}
+
+function orderInput() {
+  if (!selectedCustomer) return null;
+  return {
+    customerId: selectedCustomer.id,
+    lines: cart.map((item) =>
+      item.kind === 'STANDALONE_PRODUCT'
+        ? {
+            kind: item.kind,
+            productCode: item.code,
+            priceListVersionId: item.sourceVersionId,
+            quantity: item.quantity,
+            negotiatedUnitPrice: item.price.toFixed(4),
+          }
+        : {
+            kind: item.kind,
+            calculationId: item.calculationId!,
+            priceReference: item.priceReference as 'MINIMUM' | 'NORMAL',
+            quantity: item.quantity,
+            negotiatedUnitPrice: item.price.toFixed(4),
+          },
+    ),
+  };
+}
+
+function reviewFingerprint(): string {
+  return JSON.stringify({
+    input: orderInput(),
+    note: element<HTMLTextAreaElement>('#pedidoObs').value,
+    taxes: cart.map(({ key, taxRate }) => ({ key, taxRate })),
+  });
+}
+
+function newIdempotencyKey(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const random = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `order:${Date.now().toString(36)}:${random}`;
+}
+
+function approvalStatusLabel(status: MyOrderPriceApprovalSummary['status']): string {
+  return {
+    PENDING: 'Pendente',
+    APPROVED: 'Aprovada',
+    REJECTED: 'Reprovada',
+    CANCELLED: 'Cancelada',
+    SUPERSEDED: 'Substituída',
+    EXPIRED: 'Expirada',
+    CONSUMED: 'Consumida',
+  }[status];
+}
+
+function approvalStatusMessage(approval: MyOrderPriceApprovalSummary): string {
+  const review = approval.decision
+    ? ` Revisada por ${approval.decision.reviewer.name} em ${new Date(approval.decision.reviewedAt).toLocaleString('pt-BR')}.`
+    : '';
+  if (approval.status === 'REJECTED')
+    return approval.decision?.note
+      ? `Motivo: ${approval.decision.note}.${review}`
+      : `A solicitação foi reprovada.${review}`;
+  if (approval.status === 'APPROVED')
+    return `Válida até ${approval.decision?.approvedUntil ? new Date(approval.decision.approvedUntil).toLocaleString('pt-BR') : 'a data informada pelo servidor'}.${review}`;
+  if (approval.status === 'CONSUMED')
+    return approval.consumedOrder
+      ? `Consumida no pedido ${approval.consumedOrder.number}.`
+      : 'A aprovação já foi consumida.';
+  if (approval.status === 'PENDING') return 'Aguardando análise. Nenhum pedido foi criado.';
+  if (approval.status === 'EXPIRED') return 'A validade terminou. Faça uma nova solicitação.';
+  if (approval.status === 'SUPERSEDED') return 'Esta solicitação foi substituída por outra.';
+  return 'Esta solicitação foi cancelada.';
+}
+
+function createOrderReviewModal(): void {
+  if (document.querySelector('#order-review-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'order-review-modal';
+  overlay.innerHTML = `<div class="modal order-review-dialog" role="dialog" aria-modal="true" aria-labelledby="order-review-title" aria-describedby="order-review-status"><div class="modal-header"><div class="modal-title" id="order-review-title">Revisar e confirmar pedido</div><button class="modal-close" id="order-review-close" type="button" aria-label="Fechar revisão">×</button></div><div class="order-review-body" id="order-review-content"></div><div id="order-review-status" class="order-state order-review-error" role="status" aria-live="assertive" hidden></div><div class="modal-footer" id="order-review-actions"><button class="btn btn-ghost" id="order-review-back" type="button">Voltar e revisar</button><button class="btn btn-primary" id="order-confirm" type="button">Confirmar e enviar pedido</button></div></div>`;
+  document.body.append(overlay);
+}
+
+function createApprovalModal(): void {
+  if (document.querySelector('#order-approval-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'order-approval-modal';
+  overlay.innerHTML = `<div class="modal order-approval-dialog" role="dialog" aria-modal="true" aria-labelledby="order-approval-title" aria-describedby="order-approval-status"><div class="modal-header"><div class="modal-title" id="order-approval-title">Solicitar aprovação de preço</div><button class="modal-close" id="order-approval-close" type="button" aria-label="Fechar solicitação">×</button></div><div class="order-approval-body" id="order-approval-content"></div><div class="fld"><label class="lbl" for="order-approval-justification">Justificativa obrigatória</label><textarea class="inp order-approval-justification" id="order-approval-justification" minlength="10" maxlength="2000" placeholder="Explique o motivo comercial da exceção."></textarea></div><div id="order-approval-status" class="order-state order-review-error" role="alert" aria-live="assertive" hidden></div><div class="modal-footer"><button class="btn btn-ghost" id="order-approval-cancel" type="button">Cancelar</button><button class="btn btn-primary" id="order-approval-submit" type="button">Enviar solicitação</button></div></div>`;
+  document.body.append(overlay);
+}
+
+function renderApprovalRequest(): void {
+  const content = element<HTMLElement>('#order-approval-content');
+  clear(content);
+  const summary = document.createElement('div');
+  summary.className = 'order-review-summary';
+  summary.append(
+    reviewTextCard(
+      'Cliente',
+      selectedCustomer ? `${selectedCustomer.code} · ${selectedCustomer.legalName}` : '---',
+    ),
+    reviewTextCard('Carrinho', `${totalQuantity()} itens · ${money(orderAmount(cart))}`),
+    reviewTextCard('Linhas em exceção', String(quotedViolations.length)),
+  );
+  const impact = quotedViolations.reduce(
+    (total, violation) => total + Number(violation.totalDifference),
+    0,
+  );
+  const warning = document.createElement('p');
+  warning.className = 'order-approval-impact';
+  warning.textContent = `Impacto total abaixo do mínimo: ${money(impact)}. A solicitação não cria um pedido.`;
+  const items = document.createElement('div');
+  items.className = 'order-review-items';
+  for (const violation of quotedViolations) {
+    const row = document.createElement('div');
+    row.className = 'order-review-item is-exception';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `${violation.code} · linha ${violation.line}`;
+    const meta = document.createElement('div');
+    meta.className = 'order-review-item-meta';
+    meta.textContent = `${violation.priceListName} · faixa ${compactRangeLabel(violation.minimumOrderQuantity, violation.maximumOrderQuantity, '')} · versão ${violation.priceListVersionId}`;
+    copy.append(title, meta);
+    const values = document.createElement('div');
+    values.className = 'order-review-item-values';
+    values.textContent = `Mínimo ${money(violation.minimumUnitPrice)} · solicitado ${money(violation.negotiatedUnitPrice)}`;
+    const difference = document.createElement('div');
+    difference.textContent = `Diferença ${money(violation.unitDifference)} por unidade · ${money(violation.totalDifference)} no total · ${percentage(violation.differencePercentage)}`;
+    values.append(difference);
+    row.append(copy, values);
+    items.append(row);
+  }
+  content.append(summary, warning, items);
+}
+
+function setApprovalStatus(message = '', error = false): void {
+  const status = element<HTMLElement>('#order-approval-status');
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle('error', error);
+}
+
+function closeApprovalModal(restoreFocus = true, force = false): void {
+  if (approvalSubmitting && !force) return;
+  element<HTMLElement>('#order-approval-modal').classList.remove('open');
+  setApprovalStatus();
+  if (restoreFocus) approvalFocusReturn?.focus();
+}
+
+function openApprovalModal(): void {
+  approvalFocusReturn =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  renderApprovalRequest();
+  setApprovalStatus();
+  const modal = element<HTMLElement>('#order-approval-modal');
+  modal.classList.add('open');
+  window.requestAnimationFrame(() =>
+    element<HTMLTextAreaElement>('#order-approval-justification').focus(),
+  );
+}
+
+async function submitApprovalRequest(): Promise<void> {
+  if (approvalSubmitting || !selectedCustomer || !quotedViolations.length) return;
+  const input = orderInput();
+  if (!input) return;
+  const justification = element<HTMLTextAreaElement>('#order-approval-justification').value.trim();
+  if (justification.length < 10) {
+    setApprovalStatus('Informe uma justificativa com pelo menos 10 caracteres.', true);
+    return;
+  }
+  const fingerprint = JSON.stringify(input);
+  if (!approvalAttempt || approvalAttempt.fingerprint !== fingerprint) {
+    approvalAttempt = { fingerprint, idempotencyKey: newIdempotencyKey() };
+  }
+  const submit = element<HTMLButtonElement>('#order-approval-submit');
+  const cancel = element<HTMLButtonElement>('#order-approval-cancel');
+  approvalSubmitting = true;
+  submit.disabled = true;
+  cancel.disabled = true;
+  submit.textContent = 'Enviando…';
+  setApprovalStatus('Registrando a solicitação. Aguarde.');
+  try {
+    const response = await createOrderPriceApproval(
+      {
+        ...input,
+        justification,
+        ...(supersededApprovalId ? { supersedesRequestId: supersededApprovalId } : {}),
+      },
+      approvalAttempt.idempotencyKey,
+    );
+    selectedApproval = (await getMyOrderPriceApproval(response.data.approval.id)).data;
+    window.sessionStorage.setItem('order-price-approval-id', selectedApproval.id);
+    supersededApprovalId = null;
+    closeApprovalModal(false, true);
+    setQuoteFeedback(`Solicitação enviada e aguardando análise. Nenhum pedido foi criado.`);
+    renderCart();
+    await loadMyApprovals();
+  } catch (error) {
+    setApprovalStatus(apiMessage(error, 'Não foi possível enviar a solicitação.'), true);
+  } finally {
+    approvalSubmitting = false;
+    submit.disabled = false;
+    cancel.disabled = false;
+    submit.textContent = 'Enviar solicitação';
+  }
+}
+
+function reviewTextCard(label: string, value: string): HTMLDivElement {
+  const card = document.createElement('div');
+  card.className = 'order-review-card';
+  const caption = document.createElement('span');
+  caption.className = 'order-review-label';
+  caption.textContent = label;
+  const content = document.createElement('strong');
+  content.textContent = value;
+  card.append(caption, content);
+  return card;
+}
+
+function renderOrderReview(quote: OrderQuoteEnvelope['data']): void {
+  const content = element<HTMLElement>('#order-review-content');
+  clear(content);
+  const summary = document.createElement('div');
+  summary.className = 'order-review-summary';
+  summary.append(
+    reviewTextCard('Cliente', `${quote.customer.code} · ${quote.customer.legalName}`),
+    reviewTextCard(
+      'Emissor',
+      quote.creator
+        ? `${quote.creator.name} · ${quote.creator.email}`
+        : (currentUser?.email ?? '---'),
+    ),
+    reviewTextCard('Destinatários', quote.recipients.join(', ')),
+  );
+  const items = document.createElement('div');
+  items.className = 'order-review-items';
+  for (const line of quote.lines) {
+    const row = document.createElement('div');
+    row.className = 'order-review-item';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    const code = line.kind === 'KIT' ? line.code : line.productCode;
+    title.textContent = `${code} · ${line.description}`;
+    const meta = document.createElement('div');
+    meta.className = 'order-review-item-meta';
+    meta.textContent =
+      line.kind === 'KIT'
+        ? `${line.priceList.name} · cálculo v${line.calculationVersion} · lista v${line.priceListVersion.version}`
+        : `${line.priceList.name} · lista v${line.priceListVersion.version}${line.reference ? ` · ref. ${line.reference}` : ''}`;
+    copy.append(title, meta);
+    const values = document.createElement('div');
+    values.className = 'order-review-item-values';
+    values.textContent = `${line.quantity} × ${money(line.negotiatedUnitPrice)} = ${money(line.subtotal)}`;
+    if (line.kind === 'STANDALONE_PRODUCT') {
+      const taxes = document.createElement('div');
+      taxes.textContent = `IPI ${percentage(line.ipiRate)} · ICMS ${percentage(line.icmsRate)}`;
+      values.append(taxes);
+    }
+    if (line.referenceUnitPrice !== line.negotiatedUnitPrice) {
+      const reference = document.createElement('div');
+      reference.textContent = `Referência: ${money(line.referenceUnitPrice)}`;
+      values.append(reference);
+    }
+    row.append(copy, values);
+    items.append(row);
+  }
+  const note = reviewTextCard(
+    'Observação',
+    element<HTMLTextAreaElement>('#pedidoObs').value.trim() || 'Sem observações.',
+  );
+  note.classList.add('order-review-note');
+  content.append(summary, items, note);
+  if (quote.warnings.length) {
+    const warnings = reviewTextCard('Avisos da cotação', quote.warnings.join('\n'));
+    warnings.classList.add('order-review-warnings');
+    content.append(warnings);
+  }
+  const total = document.createElement('div');
+  total.className = 'order-review-total';
+  total.append(document.createTextNode(`${quote.totalQuantity} itens`));
+  const amount = document.createElement('span');
+  amount.textContent = money(quote.total);
+  total.append(amount);
+  content.append(total);
+}
+
+function setReviewStatus(message = '', error = false): void {
+  const status = element<HTMLElement>('#order-review-status');
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle('error', error);
+}
+
+function closeOrderReview(restoreFocus = true, force = false): void {
+  if (reviewSubmitting && !force) return;
+  element<HTMLElement>('#order-review-modal').classList.remove('open');
+  activeReview = null;
+  setReviewStatus();
+  if (restoreFocus) reviewFocusReturn?.focus();
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function monitorEmailDelivery(
+  orderId: string,
+  orderNumber: string,
+  deliveryId: string,
+): Promise<void> {
+  if (monitoredEmailDeliveries.has(deliveryId)) return;
+  monitoredEmailDeliveries.add(deliveryId);
+  const deadline = Date.now() + emailDeliveryMonitorTimeoutMs;
+  let consecutiveFailures = 0;
+  try {
+    while (Date.now() < deadline) {
+      try {
+        const details = (await loadOrder(orderId)).data;
+        consecutiveFailures = 0;
+        const delivery = details.emailDeliveries.find((item) => item.id === deliveryId);
+        if (delivery) {
+          const notification = emailDeliveryNotification(orderNumber, delivery);
+          if (notification) {
+            showNotification(notification.message, notification.kind, 7_000);
+            return;
+          }
+        }
+      } catch (error) {
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) return;
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 3) {
+          showNotification(
+            `Pedido ${orderNumber} registrado, mas não foi possível acompanhar o envio do e-mail.`,
+            'warning',
+            7_000,
+          );
+          return;
+        }
+      }
+      await wait(emailDeliveryPollIntervalMs);
+    }
+    showNotification(`O e-mail do pedido ${orderNumber} continua em processamento.`, 'info', 7_000);
+  } finally {
+    monitoredEmailDeliveries.delete(deliveryId);
+  }
+}
+
+function openOrderReview(quote: OrderQuoteEnvelope['data']): void {
+  activeReview = {
+    quote,
+    fingerprint: reviewFingerprint(),
+    idempotencyKey: newIdempotencyKey(),
+  };
+  reviewFocusReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  renderOrderReview(quote);
+  element<HTMLElement>('#order-review-actions').hidden = false;
+  setReviewStatus('Pedido validado. Revise os dados antes de confirmar.');
+  const modal = element<HTMLElement>('#order-review-modal');
+  modal.classList.add('open');
+  window.requestAnimationFrame(() => element<HTMLButtonElement>('#order-confirm').focus());
+}
+
+async function confirmOrder(): Promise<void> {
+  if (!activeReview || reviewSubmitting) return;
+  if (activeReview.fingerprint !== reviewFingerprint()) {
+    closeOrderReview(false);
+    setQuoteFeedback(
+      'O pedido mudou durante a revisão. Gere uma nova revisão antes de confirmar.',
+      true,
+    );
+    return;
+  }
+  const input = orderInput();
+  if (!input) return;
+  const confirm = element<HTMLButtonElement>('#order-confirm');
+  const back = element<HTMLButtonElement>('#order-review-back');
+  reviewSubmitting = true;
+  confirm.disabled = true;
+  back.disabled = true;
+  confirm.textContent = 'Registrando pedido…';
+  setReviewStatus('Registrando o pedido. Aguarde.');
+  try {
+    const response = await createOrder(
+      {
+        ...input,
+        note: element<HTMLTextAreaElement>('#pedidoObs').value,
+        quoteToken: activeReview.quote.quoteToken,
+        ...(selectedApproval?.status === 'APPROVED'
+          ? { approvalRequestId: selectedApproval.id }
+          : {}),
+      },
+      activeReview.idempotencyKey,
+    );
+    const { order, emailDelivery } = response.data;
+    if (savedDraft?.customer.id === selectedCustomer?.id) savedDraft = null;
+    selectedApproval = null;
+    quotedViolations = [];
+    cart = [];
+    pendingCalculation = null;
+    element<HTMLTextAreaElement>('#pedidoObs').value = '';
+    renderCart();
+    renderSavedDraft();
+    void loadMyApprovals();
+    setQuoteFeedback(`Pedido ${order.number} registrado; envio em processamento.`);
+    closeOrderReview(false, true);
+    element<HTMLButtonElement>('#pedido-client-trigger').focus();
+    showNotification(
+      `Pedido ${order.number} registrado. Envio do e-mail em processamento.`,
+      'info',
+      7_000,
+    );
+    void monitorEmailDelivery(order.id, order.number, emailDelivery.id);
+  } catch (error) {
+    const stale = error instanceof ApiError && error.code === 'ORDER_QUOTE_STALE';
+    setReviewStatus(
+      stale
+        ? 'A cotação mudou. Feche esta revisão e gere uma nova antes de confirmar.'
+        : apiMessage(error, 'Não foi possível registrar o pedido. Tente novamente.'),
+      true,
+    );
+    if (
+      error instanceof ApiError &&
+      [
+        'ORDER_PRICE_APPROVAL_EXPIRED',
+        'ORDER_PRICE_APPROVAL_CONTENT_MISMATCH',
+        'ORDER_PRICE_APPROVAL_ALREADY_CONSUMED',
+      ].includes(error.code)
+    ) {
+      selectedApproval = null;
+      window.sessionStorage.removeItem('order-price-approval-id');
+      void loadMyApprovals();
+    }
+  } finally {
+    reviewSubmitting = false;
+    confirm.disabled = false;
+    back.disabled = false;
+    confirm.textContent = 'Confirmar e enviar pedido';
+  }
+}
+
+function approvalCart(detail: MyOrderPriceApprovalDetail): CartItem[] {
+  return detail.items.map((item) => {
+    const restored: CartItem = {
+      key:
+        item.kind === 'KIT'
+          ? `kit:${item.sourceCalculationVersionId}:${item.priceReference}`
+          : `product:${item.code}:${item.sourcePriceListVersionId}`,
+      kind: item.kind,
+      code: item.code,
+      description: item.description,
+      price: Number(item.negotiatedUnitPrice),
+      taxRate: Number(item.ipiRate ?? 0),
+      referencePrice: Number(item.referenceUnitPrice),
+      priceEdited: item.negotiatedUnitPrice !== item.referenceUnitPrice,
+      priceReference: item.priceReference,
+      source: `${item.priceList.name} · faixa ${compactRangeLabel(item.priceList.minimumOrderQuantity, item.priceList.maximumOrderQuantity, '')} · lista v${item.priceList.version}`,
+      sourceVersionId: item.sourcePriceListVersionId,
+      priceListName: item.priceList.name,
+      priceListVersion: item.priceList.version,
+      minimumOrderQuantity: item.priceList.minimumOrderQuantity,
+      maximumOrderQuantity: item.priceList.maximumOrderQuantity,
+      minimumPrice: Number(item.minimumUnitPrice),
+      normalPrice: Number(item.referenceUnitPrice),
+      quantity: Number(item.quantity),
+      image: null,
+    };
+    if (item.kind === 'STANDALONE_PRODUCT') {
+      restored.priceRanges = [
+        {
+          list: `${item.priceList.name} · comparação`,
+          minimumPrice: Number(item.minimumUnitPrice),
+          maximumPrice: Number(item.referenceUnitPrice),
+          ipiRate: Number(item.ipiRate ?? 0),
+          icmsRate: Number(item.icmsRate ?? 0),
+        },
+      ];
+    }
+    if (item.ipiRate !== null) restored.ipiRate = Number(item.ipiRate);
+    if (item.icmsRate !== null) restored.icmsRate = Number(item.icmsRate);
+    if (item.sourceCalculationVersionId) restored.calculationId = item.sourceCalculationVersionId;
+    return restored;
+  });
+}
+
+async function loadApprovalIntoCart(id: string): Promise<void> {
+  setQuoteFeedback('Recuperando o carrinho da solicitação…');
+  try {
+    const detail = (await getMyOrderPriceApproval(id)).data;
+    const customer = (await getCustomer(detail.customer.id)).data.customer;
+    await selectCustomer(customer);
+    if (selectedCustomer?.id !== customer.id) return;
+    selectedApproval = detail;
+    window.sessionStorage.setItem('order-price-approval-id', detail.id);
+    supersededApprovalId = detail.status === 'PENDING' ? detail.id : null;
+    cart = approvalCart(detail);
+    quotedViolations = detail.items
+      .filter((item) => item.requiresApproval)
+      .map((item) => ({
+        line: item.lineNumber,
+        kind: item.kind,
+        code: item.code,
+        priceListVersionId: item.sourcePriceListVersionId,
+        priceListName: item.priceList.name,
+        minimumOrderQuantity: item.priceList.minimumOrderQuantity,
+        maximumOrderQuantity: item.priceList.maximumOrderQuantity,
+        quantity: item.quantity,
+        minimumUnitPrice: item.minimumUnitPrice,
+        negotiatedUnitPrice: item.negotiatedUnitPrice,
+        unitDifference: item.exceptionUnitAmount,
+        totalDifference: item.exceptionTotalAmount,
+        differencePercentage:
+          Number(item.minimumUnitPrice) > 0
+            ? ((Number(item.exceptionUnitAmount) / Number(item.minimumUnitPrice)) * 100).toFixed(4)
+            : '0.0000',
+      }));
+    syncSelectedCustomer();
+    renderCustomers(customers.length);
+    renderCart();
+    void loadCatalog();
+    setQuoteFeedback(
+      detail.status === 'APPROVED'
+        ? 'Aprovação carregada. Gere uma nova cotação para revisar e confirmar o pedido.'
+        : approvalStatusMessage(detail),
+    );
+  } catch (error) {
+    setQuoteFeedback(apiMessage(error, 'Não foi possível recuperar a solicitação.'), true);
+  }
+}
+
+function renderMyApprovals(): void {
+  const container = element<HTMLElement>('#order-approvals-list');
+  clear(container);
+  if (!myApprovals.length) {
+    container.append(state('Você ainda não possui solicitações de aprovação.'));
+    return;
+  }
+  for (const approval of myApprovals) {
+    const card = document.createElement('article');
+    card.className = 'order-approval-card';
+    const head = document.createElement('div');
+    head.className = 'order-approval-card-head';
+    const title = document.createElement('strong');
+    title.textContent = `${approval.customer.code} · ${approval.customer.legalName}`;
+    const status = document.createElement('span');
+    status.className = `order-approval-status ${approval.status.toLowerCase()}`;
+    status.textContent = approvalStatusLabel(approval.status);
+    head.append(title, status);
+    const meta = document.createElement('div');
+    meta.className = 'order-approval-card-meta';
+    meta.textContent = `${new Date(approval.requestedAt).toLocaleString('pt-BR')} · ${approval.itemCount} linhas · impacto ${money(approval.exceptionAmount)}. ${approvalStatusMessage(approval)}`;
+    const actions = document.createElement('div');
+    actions.className = 'order-approval-card-actions';
+    if (approval.status !== 'CONSUMED') {
+      const load = document.createElement('button');
+      load.type = 'button';
+      load.className = 'btn btn-ghost btn-sm';
+      load.textContent =
+        approval.status === 'APPROVED' ? 'Carregar e gerar pedido' : 'Carregar carrinho';
+      load.addEventListener('click', () => void loadApprovalIntoCart(approval.id));
+      actions.append(load);
+    }
+    if (approval.status === 'PENDING') {
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn btn-ghost btn-sm';
+      cancel.textContent = 'Cancelar solicitação';
+      cancel.addEventListener('click', async () => {
+        cancel.disabled = true;
+        try {
+          await cancelMyOrderPriceApproval(approval.id, { expectedVersion: approval.version });
+          if (selectedApproval?.id === approval.id) selectedApproval = null;
+          await loadMyApprovals();
+          setQuoteFeedback('Solicitação cancelada.');
+        } catch (error) {
+          setQuoteFeedback(apiMessage(error, 'Não foi possível cancelar a solicitação.'), true);
+          cancel.disabled = false;
+        }
+      });
+      actions.append(cancel);
+    }
+    card.append(head, meta, actions);
+    container.append(card);
+  }
+}
+
+async function loadMyApprovals(): Promise<void> {
+  const container = element<HTMLElement>('#order-approvals-list');
+  clear(container);
+  container.append(state('Carregando solicitações…'));
+  try {
+    const response = await listMyOrderPriceApprovals({ pageSize: 20 });
+    myApprovals = response.data;
+    renderMyApprovals();
+    if (selectedApproval) {
+      const refreshed = myApprovals.find(({ id }) => id === selectedApproval?.id);
+      if (refreshed && refreshed.version !== selectedApproval.version) {
+        selectedApproval = (await getMyOrderPriceApproval(refreshed.id)).data;
+        renderCart();
+        setQuoteFeedback(approvalStatusMessage(selectedApproval));
+      }
+    }
+    const rememberedId = window.sessionStorage.getItem('order-price-approval-id');
+    if (rememberedId && !selectedApproval && !cart.length) {
+      const remembered = myApprovals.find(({ id }) => id === rememberedId);
+      if (remembered?.status === 'APPROVED') {
+        await loadApprovalIntoCart(rememberedId);
+      }
+    }
+  } catch (error) {
+    clear(container);
+    const failure = state(apiMessage(error, 'Não foi possível carregar suas solicitações.'));
+    failure.classList.add('error');
+    container.append(failure);
+  }
 }
 
 function setPickerOpen(open: boolean): void {
@@ -261,43 +924,197 @@ function syncSelectedCustomer(): void {
     : 'Busque por código, razão social ou segmento';
 }
 
-function clearSelectedCustomer(): void {
-  if (!selectedCustomer) return;
+function draftPayload() {
+  return {
+    note: element<HTMLTextAreaElement>('#pedidoObs').value,
+    cart: cart.map((item) => {
+      const savedItem: CartItem = {
+        ...item,
+        image: item.image ? { ...item.image } : null,
+        ...(item.priceRanges
+          ? { priceRanges: item.priceRanges.map((range) => ({ ...range })) }
+          : {}),
+      };
+      delete savedItem.lastOrderPrice;
+      return savedItem;
+    }),
+    ...(selectedApproval ? { approvalRequestId: selectedApproval.id } : {}),
+  };
+}
+
+function renderSavedDraft(): void {
+  const panel = element<HTMLElement>('#order-saved-draft');
+  const visible = Boolean(savedDraft && savedDraft.customer.id !== selectedCustomer?.id);
+  panel.hidden = !visible;
+  if (!savedDraft || !visible) return;
+  element<HTMLElement>('#order-saved-draft-customer').textContent =
+    `${savedDraft.customer.code} · ${savedDraft.customer.legalName}`;
+  const quantity = orderTotalQuantity(savedDraft.payload.cart);
+  element<HTMLElement>('#order-saved-draft-meta').textContent =
+    `${quantity} ${quantity === 1 ? 'item' : 'itens'} · ${money(orderAmount(savedDraft.payload.cart))} · salvo em ${new Date(savedDraft.updatedAt).toLocaleString('pt-BR')}`;
+  element<HTMLButtonElement>('#order-saved-draft-resume').disabled = !savedDraft.customer.active;
+}
+
+async function loadSavedDraft(): Promise<void> {
+  const sequence = ++draftSequence;
+  try {
+    const response = await loadOrderDraft();
+    if (sequence !== draftSequence) return;
+    savedDraft = response.data.draft;
+    renderSavedDraft();
+    renderCustomers(customers.length);
+  } catch (error) {
+    if (sequence !== draftSequence) return;
+    savedDraft = null;
+    renderSavedDraft();
+    setRangeWarning(apiMessage(error, 'Não foi possível consultar o pedido anterior salvo.'));
+  }
+}
+
+async function restoreDraftApproval(id: string): Promise<void> {
+  try {
+    const detail = (await getMyOrderPriceApproval(id)).data;
+    if (detail.customer.id !== selectedCustomer?.id) return;
+    selectedApproval = detail;
+    window.sessionStorage.setItem('order-price-approval-id', detail.id);
+    updateCartSummary();
+  } catch {
+    selectedApproval = null;
+    window.sessionStorage.removeItem('order-price-approval-id');
+  }
+}
+
+async function discardSavedDraft(): Promise<void> {
+  if (!savedDraft || !window.confirm('Descartar o pedido anterior salvo?')) return;
+  const customerId = savedDraft.customer.id;
+  try {
+    await deleteOrderDraft(customerId);
+    savedDraft = null;
+    renderSavedDraft();
+    renderCustomers(customers.length);
+    showNotification('Pedido anterior descartado.', 'info');
+  } catch (error) {
+    setRangeWarning(apiMessage(error, 'Não foi possível descartar o pedido anterior.'));
+  }
+}
+
+async function resumeSavedDraft(): Promise<void> {
+  if (!savedDraft || !savedDraft.customer.active) return;
+  try {
+    const customer = (await getCustomer(savedDraft.customer.id)).data.customer;
+    await selectCustomer(customer);
+  } catch (error) {
+    setRangeWarning(apiMessage(error, 'Não foi possível retomar o pedido anterior.'));
+  }
+}
+
+async function clearSelectedCustomer(): Promise<void> {
+  if (!selectedCustomer || customerSwitching) return;
+  const customer = selectedCustomer;
+  const hadOrder = cart.length > 0;
+
+  if (hadOrder) {
+    customerSwitching = true;
+    setRangeWarning('Salvando o pedido em montagem…');
+    try {
+      const response = await saveOrderDraft({
+        customerId: customer.id,
+        payload: draftPayload(),
+      });
+      savedDraft = response.data.draft;
+    } catch (error) {
+      setRangeWarning(
+        apiMessage(error, 'Não foi possível salvar o pedido. O cliente não foi removido.'),
+      );
+      customerSwitching = false;
+      return;
+    }
+  }
+
   selectedCustomer = null;
+  selectedPriceList = null;
+  pendingCalculation = null;
+  cart = [];
   element<HTMLTextAreaElement>('#pedidoObs').value = '';
   element<HTMLInputElement>('#pedidoClienteSearch').value = '';
   element<HTMLButtonElement>('#order-reload-lists').hidden = true;
   setPickerOpen(false);
   syncSelectedCustomer();
   renderCustomers(customers.length);
-  setRangeWarning();
+  setRangeWarning(hadOrder ? 'Pedido em montagem salvo.' : '');
   invalidateQuote();
   renderCart();
   void loadCatalog();
+  renderSavedDraft();
+  customerSwitching = false;
   element<HTMLButtonElement>('#pedido-client-trigger').focus();
 }
 
-function selectCustomer(customer: Customer): void {
+async function selectCustomer(customer: Customer): Promise<void> {
+  if (customerSwitching) return;
   const hadPreviousCustomer = Boolean(selectedCustomer);
   const changed = selectedCustomer?.id !== customer.id;
+  if (!changed) {
+    setPickerOpen(false);
+    return;
+  }
+  const previousCustomer = selectedCustomer;
+  const previousHadOrder = Boolean(previousCustomer && cart.length);
+  customerSwitching = true;
+  setRangeWarning(previousHadOrder ? 'Salvando o pedido anterior…' : 'Carregando pedido…');
+  let restored: OrderDraft | null = null;
+  try {
+    const response = await swapOrderDraft({
+      targetCustomerId: customer.id,
+      ...(previousHadOrder && previousCustomer
+        ? { current: { customerId: previousCustomer.id, payload: draftPayload() } }
+        : {}),
+    });
+    restored = response.data.restored;
+    savedDraft = response.data.draft;
+  } catch (error) {
+    setRangeWarning(
+      apiMessage(error, 'Não foi possível salvar o pedido anterior. O cliente não foi alterado.'),
+    );
+    customerSwitching = false;
+    return;
+  }
+
   selectedCustomer = customer;
-  element<HTMLTextAreaElement>('#pedidoObs').value = customer.orderNote ?? '';
+  selectedApproval = null;
+  element<HTMLTextAreaElement>('#pedidoObs').value =
+    restored?.payload.note ?? customer.orderNote ?? '';
   element<HTMLInputElement>('#pedidoClienteSearch').value = '';
   syncSelectedCustomer();
   renderCustomers(customers.length);
   setPickerOpen(false);
-  if (changed) {
-    invalidateQuote();
-    cart = [];
-    applyPendingCalculation();
-    setRangeWarning(
-      hadPreviousCustomer
-        ? 'Cliente alterado. Os itens e os preços anteriores foram invalidados.'
+  invalidateQuote();
+  cart = restored
+    ? restored.payload.cart.map((item) => ({
+        ...item,
+        image: item.image ? { ...item.image } : null,
+        ...(item.priceRanges
+          ? { priceRanges: item.priceRanges.map((range) => ({ ...range })) }
+          : {}),
+      }))
+    : [];
+  if (!restored) applyPendingCalculation();
+  setRangeWarning(
+    restored
+      ? `Pedido anterior de ${customer.legalName} retomado.`
+      : hadPreviousCustomer
+        ? previousHadOrder
+          ? 'Cliente alterado. O pedido anterior foi salvo.'
+          : 'Cliente alterado.'
         : 'Cliente selecionado. O catálogo agora mostra apenas ofertas compatíveis.',
-    );
-    renderCart();
-    void loadCatalog();
-  }
+  );
+  renderCart();
+  void refreshLastSalePrices();
+  renderSavedDraft();
+  void loadCatalog();
+  if (restored?.payload.approvalRequestId)
+    void restoreDraftApproval(restored.payload.approvalRequestId);
+  customerSwitching = false;
   element<HTMLButtonElement>('#pedido-client-trigger').focus();
 }
 
@@ -319,11 +1136,17 @@ function customerOption(customer: Customer): HTMLButtonElement {
   meta.className = 'cliente-option-meta';
   meta.textContent = customerDetails(customer);
   main.append(name, meta);
+  if (savedDraft?.customer.id === customer.id && selectedCustomer?.id !== customer.id) {
+    const saved = document.createElement('small');
+    saved.className = 'order-customer-draft-label';
+    saved.textContent = 'Pedido anterior salvo';
+    main.append(saved);
+  }
   const tag = document.createElement('div');
   tag.className = 'cliente-option-tag';
   tag.textContent = customer.customerSegment?.name ?? customer.segment ?? 'Sem segmento';
   button.append(code, main, tag);
-  button.addEventListener('click', () => selectCustomer(customer));
+  button.addEventListener('click', () => void selectCustomer(customer));
   return button;
 }
 
@@ -403,7 +1226,7 @@ async function submitPreRegistration(event: SubmitEvent): Promise<void> {
     customers = [customer, ...customers.filter((item) => item.id !== customer.id)];
     element<HTMLElement>('#order-customer-pre-modal').classList.remove('open');
     form.reset();
-    selectCustomer(customer);
+    await selectCustomer(customer);
   } catch (error) {
     setPreRegistrationError(apiMessage(error, 'Não foi possível pré-cadastrar o cliente.'));
   } finally {
@@ -542,6 +1365,38 @@ function addToCart(item: CartItem): void {
 function revalidateAfterCartChange(): void {
   invalidateQuote();
   renderCart();
+  void refreshLastSalePrices();
+}
+
+async function refreshLastSalePrices(): Promise<void> {
+  const sequence = ++lastSalePriceSequence;
+  const customer = selectedCustomer;
+  if (!customer || !cart.length) return;
+
+  lastSalePricesFailed = false;
+  for (const item of cart) delete item.lastOrderPrice;
+  renderCart();
+  try {
+    const response = await loadLastSalePrices({
+      customerId: customer.id,
+      lines: cart.map((item) =>
+        item.kind === 'KIT'
+          ? { key: item.key, kind: item.kind, calculationId: item.calculationId! }
+          : { key: item.key, kind: item.kind, productCode: item.code },
+      ),
+    });
+    if (sequence !== lastSalePriceSequence || selectedCustomer?.id !== customer.id) return;
+    const prices = new Map(
+      response.data.prices.map((item) => [item.key, item.lastOrderPrice] as const),
+    );
+    for (const item of cart) item.lastOrderPrice = prices.get(item.key) ?? null;
+    renderCart();
+  } catch {
+    if (sequence !== lastSalePriceSequence || selectedCustomer?.id !== customer.id) return;
+    for (const item of cart) delete item.lastOrderPrice;
+    lastSalePricesFailed = true;
+    renderCart();
+  }
 }
 
 function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
@@ -610,8 +1465,12 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
         ? `${range.priceList.name} · lista v${range.priceListVersion}`
         : `${compatibleLists} · referência pela maior oferta`,
       sourceVersionId: range?.priceListVersionId ?? item.priceListVersionId,
-      minimumPrice: Number(item.minimumPrice),
-      normalPrice: Number(item.maximumPrice),
+      priceListName: range?.priceList.name ?? item.priceList.name,
+      priceListVersion: range?.priceListVersion ?? item.priceListVersion,
+      minimumOrderQuantity: range?.minimumOrderQuantity ?? null,
+      maximumOrderQuantity: range?.maximumOrderQuantity ?? null,
+      minimumPrice: Number(range?.minimumPrice ?? item.minimumPrice),
+      normalPrice: Number(range?.maximumPrice ?? item.maximumPrice),
       priceRanges: cartRanges,
       ipiRate: Number(range?.ipiRate ?? item.ipiRate ?? 0),
       icmsRate: Number(range?.icmsRate ?? item.icmsRate ?? 0),
@@ -833,6 +1692,11 @@ function renderCart(): void {
   for (const item of cart) {
     const row = document.createElement('div');
     row.className = 'order-cart-row';
+    const violation = quotedViolations.find(
+      (candidate) =>
+        candidate.code === item.code && candidate.priceListVersionId === item.sourceVersionId,
+    );
+    row.classList.toggle('has-exception', Boolean(violation));
     const top = document.createElement('div');
     top.className = 'order-cart-top';
     const badge = document.createElement('span');
@@ -873,9 +1737,30 @@ function renderCart(): void {
     source.append(
       `${item.source}${item.calculatedAt ? ` · calculado em ${date(item.calculatedAt)}` : ''}`,
     );
+    const lastOrderPrice = document.createElement('span');
+    lastOrderPrice.className = 'order-cart-last-price';
+    lastOrderPrice.textContent = !selectedCustomer
+      ? ''
+      : lastSalePricesFailed
+        ? ' · último pedido indisponível'
+        : item.lastOrderPrice === undefined
+          ? ' · consultando último pedido…'
+          : item.lastOrderPrice
+            ? ` · último pedido ${money(item.lastOrderPrice.unitPrice)}`
+            : ' · ainda não vendido para este cliente';
+    if (item.lastOrderPrice) {
+      lastOrderPrice.title = `${item.lastOrderPrice.orderNumber} · ${date(item.lastOrderPrice.orderedAt)}`;
+    }
+    source.append(lastOrderPrice);
     if (item.minimumPrice !== undefined && item.normalPrice !== undefined) {
       const referencePrices = document.createElement('span');
       referencePrices.className = 'order-cart-reference-prices reference-price';
+      if (item.kind === 'STANDALONE_PRODUCT') {
+        const selected = document.createElement('span');
+        selected.className = 'order-cart-price-minimum';
+        selected.textContent = `Mínimo da faixa selecionada: ${money(item.minimumPrice)} · ${item.priceListName ?? 'lista selecionada'} · ${compactRangeLabel(item.minimumOrderQuantity ?? null, item.maximumOrderQuantity ?? null, '')} · lista v${item.priceListVersion ?? 'atual'}`;
+        referencePrices.append(selected);
+      }
       if (item.priceRanges?.length) {
         for (const range of item.priceRanges) {
           const priceRange = document.createElement('span');
@@ -888,7 +1773,7 @@ function renderCart(): void {
           );
           referencePrices.append(priceRange);
         }
-      } else {
+      } else if (item.kind !== 'STANDALONE_PRODUCT') {
         const minimum = document.createElement('span');
         minimum.className = 'order-cart-price-minimum';
         minimum.textContent = `Mínimo ${money(item.minimumPrice)}`;
@@ -898,6 +1783,12 @@ function renderCart(): void {
         referencePrices.append(minimum, normal);
       }
       source.append(referencePrices);
+    }
+    if (violation) {
+      const exception = document.createElement('div');
+      exception.className = 'order-cart-exception';
+      exception.textContent = `Exceção de preço: mínimo ${money(violation.minimumUnitPrice)}, solicitado ${money(violation.negotiatedUnitPrice)}, diferença total ${money(violation.totalDifference)} (${percentage(violation.differencePercentage)}).`;
+      source.append(exception);
     }
     if (
       item.kind === 'STANDALONE_PRODUCT' &&
@@ -938,7 +1829,11 @@ function renderCart(): void {
     price.inputMode = 'decimal';
     price.value = item.price.toFixed(2).replace('.', ',');
     price.setAttribute('aria-label', `Preço unitário de ${item.code}`);
+    price.disabled = !canOverridePrices();
+    if (!canOverridePrices())
+      price.title = 'Seu usuário não possui permissão para negociar o preço.';
     price.addEventListener('input', () => {
+      invalidateQuote();
       const parsed = parseMoney(price.value);
       if (parsed === null) return;
       item.price = parsed;
@@ -967,6 +1862,7 @@ function renderCart(): void {
     tax.setAttribute('aria-label', `Imposto percentual de ${item.code}`);
     tax.disabled = item.kind !== 'STANDALONE_PRODUCT';
     tax.addEventListener('input', () => {
+      invalidateQuote();
       const parsed = parsePercentage(tax.value);
       if (parsed === null) return;
       item.taxRate = parsed;
@@ -1013,39 +1909,41 @@ function updateCartSummary(): void {
   element<HTMLElement>('#pedidoTotalQty').textContent =
     `${quantity} ${quantity === 1 ? 'item' : 'itens'}`;
   element<HTMLElement>('#pedidoSubNor').textContent = money(total);
-  element<HTMLButtonElement>('#order-review').disabled = !selectedCustomer || !cart.length;
+  const review = element<HTMLButtonElement>('#order-review');
+  const apparentException = cart.some(
+    (item) => item.minimumPrice !== undefined && item.price < item.minimumPrice,
+  );
+  review.textContent =
+    selectedApproval?.status === 'PENDING'
+      ? 'Aguardando aprovação'
+      : apparentException && selectedApproval?.status !== 'APPROVED'
+        ? 'Solicitar aprovação'
+        : 'Gerar pedido';
+  review.disabled = !selectedCustomer || !cart.length || selectedApproval?.status === 'PENDING';
 }
 
 async function reviewOrder(): Promise<void> {
   if (!selectedCustomer || !cart.length) return;
+  const input = orderInput();
+  if (!input) return;
   const review = element<HTMLButtonElement>('#order-review');
   review.disabled = true;
   setQuoteFeedback('Validando cliente, lista, versões e preços no servidor…');
   try {
-    const response = await quoteOrder({
-      customerId: selectedCustomer.id,
-      lines: cart.map((item) =>
-        item.kind === 'STANDALONE_PRODUCT'
-          ? {
-              kind: item.kind,
-              productCode: item.code,
-              priceListVersionId: item.sourceVersionId,
-              quantity: item.quantity,
-            }
-          : {
-              kind: item.kind,
-              calculationId: item.calculationId!,
-              priceReference: item.priceReference as 'MINIMUM' | 'NORMAL',
-              quantity: item.quantity,
-            },
-      ),
-    });
+    const response = await quoteOrder(input);
+    quotedViolations = response.data.approval?.violations ?? [];
     response.data.lines.forEach((quoted, index) => {
       const item = cart[index];
       if (!item) return;
-      item.referencePrice = Number(quoted.unitPrice);
-      if (!item.priceEdited) item.price = item.referencePrice;
+      item.referencePrice = Number(quoted.referenceUnitPrice ?? quoted.unitPrice);
+      item.price = Number(quoted.negotiatedUnitPrice ?? quoted.unitPrice);
+      item.priceEdited = Math.abs(item.price - item.referencePrice) > 0.0001;
       item.sourceVersionId = quoted.priceListVersion.id;
+      item.priceListName = quoted.priceList.name;
+      item.priceListVersion = quoted.priceListVersion.version;
+      item.minimumOrderQuantity = quoted.priceList.minimumOrderQuantity ?? null;
+      item.maximumOrderQuantity = quoted.priceList.maximumOrderQuantity ?? null;
+      item.minimumPrice = Number(quoted.minimumReferencePrice ?? item.minimumPrice ?? 0);
       item.image = quoted.image;
       if (quoted.kind === 'STANDALONE_PRODUCT') {
         item.ipiRate = Number(quoted.ipiRate ?? 0);
@@ -1057,14 +1955,22 @@ async function reviewOrder(): Promise<void> {
           : `${quoted.priceList.name} · cálculo v${quoted.calculationVersion} · lista v${quoted.priceListVersion.version}`;
     });
     renderCart();
-    const warning = response.data.warnings.length ? ` ${response.data.warnings.join(' ')}` : '';
-    const negotiated = cart.some(({ priceEdited }) => priceEdited)
-      ? ' Os preços informados manualmente foram preservados.'
-      : '';
-    const total = orderAmount(cart);
-    setQuoteFeedback(
-      `Pedido gerado. Cotação validada pelo servidor para ${response.data.totalQuantity} itens. Total ${money(total)}.${negotiated}${warning}`,
-    );
+    if (response.data.approval?.required) {
+      if (selectedApproval?.status === 'APPROVED') {
+        openOrderReview(response.data);
+        setQuoteFeedback('Aprovação válida encontrada. Revise a nova cotação antes de confirmar.');
+      } else if (selectedApproval?.status === 'PENDING') {
+        setQuoteFeedback('Esta solicitação ainda aguarda análise. Nenhum pedido foi criado.');
+      } else {
+        openApprovalModal();
+        setQuoteFeedback('O carrinho possui preço abaixo do mínimo e precisa de aprovação.');
+      }
+    } else {
+      selectedApproval = null;
+      window.sessionStorage.removeItem('order-price-approval-id');
+      openOrderReview(response.data);
+      setQuoteFeedback('Cotação validada. Revise os dados antes da confirmação final.');
+    }
   } catch (error) {
     const details =
       error instanceof ApiError ? Object.values(error.fieldErrors).flat().join(' ') : '';
@@ -1072,21 +1978,36 @@ async function reviewOrder(): Promise<void> {
       `${apiMessage(error, 'Não foi possível validar o carrinho.')}${details ? ` ${details}` : ''}`,
       true,
     );
+    if (
+      error instanceof ApiError &&
+      ['ORDER_PRICE_APPROVAL_EXPIRED', 'ORDER_PRICE_APPROVAL_CONTENT_MISMATCH'].includes(error.code)
+    ) {
+      selectedApproval = null;
+      window.sessionStorage.removeItem('order-price-approval-id');
+    }
   } finally {
-    review.disabled = !selectedCustomer || !cart.length;
+    updateCartSummary();
   }
 }
 
 export function initializeOrdersPage(): void {
   if (initialized) return;
   initialized = true;
+  createOrderReviewModal();
+  createApprovalModal();
   element<HTMLButtonElement>('#order-back').addEventListener('click', backToOrderOrigin);
   const picker = element<HTMLElement>('#pedidoClientePicker');
   const trigger = element<HTMLButtonElement>('#pedido-client-trigger');
   trigger.addEventListener('click', () => setPickerOpen(!picker.classList.contains('open')));
-  element<HTMLButtonElement>('#pedido-client-clear').addEventListener('click', () =>
-    clearSelectedCustomer(),
-  );
+  element<HTMLButtonElement>('#pedido-client-clear').addEventListener('click', () => {
+    void clearSelectedCustomer();
+  });
+  element<HTMLButtonElement>('#order-saved-draft-resume').addEventListener('click', () => {
+    void resumeSavedDraft();
+  });
+  element<HTMLButtonElement>('#order-saved-draft-discard').addEventListener('click', () => {
+    void discardSavedDraft();
+  });
   element<HTMLButtonElement>('#order-customer-add').addEventListener('click', () => {
     void openPreRegistration();
   });
@@ -1120,6 +2041,28 @@ export function initializeOrdersPage(): void {
     }
   });
   element<HTMLButtonElement>('#order-review').addEventListener('click', () => void reviewOrder());
+  element<HTMLButtonElement>('#order-approvals-reload').addEventListener(
+    'click',
+    () => void loadMyApprovals(),
+  );
+  element<HTMLButtonElement>('#order-approval-submit').addEventListener(
+    'click',
+    () => void submitApprovalRequest(),
+  );
+  for (const selector of ['#order-approval-close', '#order-approval-cancel']) {
+    element<HTMLButtonElement>(selector).addEventListener('click', () => closeApprovalModal());
+  }
+  element<HTMLElement>('#order-approval-modal').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeApprovalModal();
+  });
+  element<HTMLButtonElement>('#order-confirm').addEventListener('click', () => void confirmOrder());
+  for (const selector of ['#order-review-close', '#order-review-back']) {
+    element<HTMLButtonElement>(selector).addEventListener('click', () => closeOrderReview());
+  }
+  element<HTMLElement>('#order-review-modal').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeOrderReview();
+  });
+  element<HTMLTextAreaElement>('#pedidoObs').addEventListener('input', invalidateQuote);
   element<HTMLButtonElement>('#order-drawer-open').addEventListener('click', () => {
     drawerFilter = 'ALL';
     catalogPage = 1;
@@ -1163,13 +2106,70 @@ export function initializeOrdersPage(): void {
     )
       closePreRegistration();
     if (event.key === 'Escape') setDrawerOpen(false);
+    const approvalModal = element<HTMLElement>('#order-approval-modal');
+    if (event.key === 'Escape' && approvalModal.classList.contains('open')) {
+      event.preventDefault();
+      closeApprovalModal();
+    }
+    const reviewModal = element<HTMLElement>('#order-review-modal');
+    if (event.key === 'Escape' && reviewModal.classList.contains('open')) {
+      event.preventDefault();
+      closeOrderReview();
+    }
+    if (event.key === 'Tab' && reviewModal.classList.contains('open')) {
+      const focusable = [
+        ...reviewModal.querySelectorAll<HTMLElement>('button:not([disabled])'),
+      ].filter((node) => !node.hidden);
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    if (event.key === 'Tab' && approvalModal.classList.contains('open')) {
+      const focusable = [
+        ...approvalModal.querySelectorAll<HTMLElement>(
+          'button:not([disabled]),textarea:not([disabled])',
+        ),
+      ].filter((node) => !node.hidden);
+      if (!focusable.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
   });
   syncSelectedCustomer();
   renderCart();
 }
 
 export function showOrdersPage(user: AuthenticatedUser): void {
+  const userChanged = currentUser?.id !== user.id;
   currentUser = user;
+  if (userChanged) {
+    selectedCustomer = null;
+    selectedPriceList = null;
+    cart = [];
+    savedDraft = null;
+    selectedApproval = null;
+    pendingCalculation = null;
+    quotedViolations = [];
+    window.sessionStorage.removeItem('order-price-approval-id');
+    element<HTMLTextAreaElement>('#pedidoObs').value = '';
+    syncSelectedCustomer();
+    renderCart();
+    renderSavedDraft();
+  }
   element<HTMLButtonElement>('#order-customer-add').hidden = !canManageCustomers();
   syncBackButton();
   setPickerOpen(false);
@@ -1178,16 +2178,10 @@ export function showOrdersPage(user: AuthenticatedUser): void {
   void loadVisibleCatalog();
   element<HTMLButtonElement>('#order-reload-lists').hidden = !selectedCustomer;
   void loadCustomers();
+  void loadSavedDraft();
+  void loadMyApprovals();
   const query = new URLSearchParams(window.location.search);
   const calculationId = query.get('calculo');
   const customerId = query.get('cliente');
-  if (calculationId && pendingCalculation?.id !== calculationId) {
-    cart = [];
-    selectedPriceList = null;
-    renderCart();
-    void loadPendingCalculation(calculationId);
-  } else if (!calculationId) {
-    pendingCalculation = null;
-  }
-  if (customerId && selectedCustomer?.id !== customerId) void loadPendingCustomer(customerId);
+  void loadOrderContext(calculationId, customerId);
 }

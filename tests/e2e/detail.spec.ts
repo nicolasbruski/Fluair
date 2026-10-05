@@ -142,6 +142,20 @@ test.beforeEach(async ({ page }) => {
       }),
     }),
   );
+  await page.route('**/api/v1/orders/draft**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { draft: null } }),
+    }),
+  );
+  await page.route('**/api/v1/order-price-approvals/mine**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { approvals: [] } }),
+    }),
+  );
   await page.route('**/api/v1/customers?**', (route) =>
     route.fulfill({
       status: 200,
@@ -180,6 +194,17 @@ test.beforeEach(async ({ page }) => {
                 createdAt: detail.createdAt,
                 createdBy: 'Samara',
                 image: currentImage,
+                lastOrderPrice: {
+                  unitPrice: '4990.0000',
+                  orderId: '80000000-0000-4000-8000-000000000001',
+                  orderNumber: 'PED-2026-000123',
+                  orderedAt: '2026-10-02T15:00:00.000Z',
+                  customer: {
+                    id: '10000000-0000-4000-8000-000000000001',
+                    code: 'C01619',
+                    legalName: 'Expresso Figueiredo',
+                  },
+                },
               },
               {
                 id: oldCalculationId,
@@ -196,6 +221,7 @@ test.beforeEach(async ({ page }) => {
                 createdAt: '2026-08-01T12:00:00.000Z',
                 createdBy: 'Admin',
                 image: historicalImage,
+                lastOrderPrice: null,
               },
             ],
           },
@@ -292,6 +318,9 @@ test('abre composição real, histórico, exporta e encaminha o kit ao pedido', 
   await expect(history).toHaveClass(/open/);
   await expect(history.getByText('Versão 2')).toBeVisible();
   await expect(history.getByText('Versão 1')).toBeVisible();
+  await expect(history.getByText(/Último pedido desta versão: R\$\s*4\.990,00/)).toBeVisible();
+  await expect(history.getByText(/PED-2026-000123/)).toBeVisible();
+  await expect(history.getByText('Último pedido desta versão: ainda não vendida')).toBeVisible();
   await expect(history.getByRole('button', { name: /Ampliar foto/ })).toHaveCount(2);
   await expect(
     history.locator('img[src*="70000000-0000-4000-8000-000000000001/thumb"]'),
@@ -312,6 +341,8 @@ test('abre composição real, histórico, exporta e encaminha o kit ao pedido', 
   );
   await expect(page.locator('#s-pedido')).toBeVisible();
   await expect(page.locator('#pedidoItems')).toContainText('KIT CONDENSADOR REAL');
+  await expect(page.getByLabel('Preço unitário de 00130001')).toHaveValue('5130,00');
+  await expect(page.locator('#pedidoSubNor')).toHaveText(/R\$\s*5\.130,00/);
   await expect(page.locator('#order-prefill-feedback')).toHaveCount(0);
   const backButton = page.locator('#order-back');
   await expect(backButton).toBeVisible();
