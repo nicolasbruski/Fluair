@@ -60,6 +60,11 @@ function canonicalLine(item: OrderPriceApprovalItemSnapshot) {
     minimumUnitPrice: fixedDecimal(item.minimumUnitPrice, 'minimumUnitPrice'),
     referenceUnitPrice: fixedDecimal(item.referenceUnitPrice, 'referenceUnitPrice'),
     negotiatedUnitPrice: fixedDecimal(item.negotiatedUnitPrice, 'negotiatedUnitPrice'),
+    finalUnitPrice: fixedDecimal(
+      item.finalUnitPrice ?? item.negotiatedUnitPrice,
+      'finalUnitPrice',
+    ),
+    taxes: item.taxes ?? null,
     minimumSubtotal: fixedDecimal(item.minimumSubtotal, 'minimumSubtotal'),
     negotiatedSubtotal: fixedDecimal(item.negotiatedSubtotal, 'negotiatedSubtotal'),
   };
@@ -151,12 +156,16 @@ export function approvalContentFromQuote(
       referenceUnitPrice: line.referenceUnitPrice,
       minimumUnitPrice: minimum.toFixed(4),
       negotiatedUnitPrice: negotiated.toFixed(4),
+      finalUnitPrice: line.finalUnitPrice,
+      taxes: line.taxes,
       minimumSubtotal: minimum.mul(quantity).toFixed(4),
       negotiatedSubtotal: negotiated.mul(quantity).toFixed(4),
       exceptionUnitAmount: unitException.toFixed(4),
       exceptionTotalAmount: unitException.mul(quantity).toFixed(4),
-      ipiRate: line.kind === 'STANDALONE_PRODUCT' ? line.ipiRate : null,
-      icmsRate: line.kind === 'STANDALONE_PRODUCT' ? line.icmsRate : null,
+      pisRate: line.pisRate,
+      cofinsRate: line.cofinsRate,
+      ipiRate: line.ipiRate,
+      icmsRate: line.icmsRate,
     };
   });
 

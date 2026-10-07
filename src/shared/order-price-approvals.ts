@@ -1,4 +1,5 @@
 import type { PriceListTypeCode } from './pricing.js';
+import type { OrderAppliedTaxes, OrderTaxBreakdown } from './orders.js';
 
 export const ORDER_PRICE_APPROVAL_STATUSES = [
   'PENDING',
@@ -55,12 +56,16 @@ export interface OrderPriceApprovalItemSnapshot {
   referenceUnitPrice: string;
   minimumUnitPrice: string;
   negotiatedUnitPrice: string;
+  finalUnitPrice?: string;
+  taxes?: OrderTaxBreakdown | null;
   minimumSubtotal: string;
   negotiatedSubtotal: string;
   exceptionUnitAmount: string;
   exceptionTotalAmount: string;
   ipiRate: string | null;
   icmsRate: string | null;
+  pisRate?: string | null;
+  cofinsRate?: string | null;
 }
 
 export interface OrderPriceViolation {
@@ -148,6 +153,7 @@ export interface CreateOrderPriceApprovalInput {
         priceListVersionId: string;
         quantity: number;
         negotiatedUnitPrice: string;
+        appliedTaxes?: OrderAppliedTaxes;
       }
     | {
         kind: 'KIT';
@@ -155,6 +161,7 @@ export interface CreateOrderPriceApprovalInput {
         priceReference: 'MINIMUM' | 'NORMAL';
         quantity: number;
         negotiatedUnitPrice: string;
+        appliedTaxes?: OrderAppliedTaxes;
       }
   >;
   justification: string;

@@ -1,5 +1,6 @@
 import { ROLE_CODES, type AuthenticatedUser } from '../shared/auth.js';
 import type { Customer, CustomerClass, CustomerSegment } from '../shared/customers.js';
+import type { LastOrderPrice } from '../shared/last-order-price.js';
 import type { CalculationDetail } from '../shared/pricing.js';
 import type {
   EligibleOrderPriceList,
@@ -15,8 +16,14 @@ import type {
   OrderPriceViolation,
 } from '../shared/order-price-approvals.js';
 import { orderTotalQuantity } from '../shared/order-quantity.js';
-import { orderAmount, orderLineAmount } from '../shared/order-money.js';
+import {
+  orderAmount,
+  orderLineAmount,
+  orderTaxUnitAmount,
+  orderUnitAmount,
+} from '../shared/order-money.js';
 import { descriptionWithoutUser } from './display-text.js';
+import { customerDraftLabel } from './order-draft-tabs.js';
 import { createMediaImage } from './components/media-image.js';
 import { showNotification } from './notifications.js';
 import { emailDeliveryNotification } from './order-email-status.js';
@@ -42,15 +49,32 @@ import {
   deleteOrderDraft,
 } from './services/orders-api.js';
 import {
-  cancelMyOrderPriceApproval,
   createOrderPriceApproval,
   getMyOrderPriceApproval,
-  listMyOrderPriceApprovals,
 } from './services/order-price-approvals-api.js';
 
 type CatalogItem = OrderStandaloneCatalogItem | OrderKitCatalogItem;
 
 type CartItem = OrderDraftCartItem;
+
+function defaultTaxes(rates: Partial<Record<'pis' | 'cofins' | 'icms' | 'ipi', number>> = {}) {
+  return {
+    pis: { selected: true, rate: rates.pis ?? 0 },
+    cofins: { selected: true, rate: rates.cofins ?? 0 },
+    icms: { selected: true, rate: rates.icms ?? 0 },
+    ipi: { selected: true, rate: rates.ipi ?? 0 },
+  };
+}
+
+function ensureTaxes(item: CartItem): NonNullable<CartItem['taxes']> {
+  item.taxes ??= defaultTaxes({
+    pis: item.pisRate ?? 0,
+    cofins: item.cofinsRate ?? 0,
+    icms: item.icmsRate ?? 0,
+    ipi: item.ipiRate ?? item.taxRate ?? 0,
+  });
+  return item.taxes;
+}
 
 let currentUser: AuthenticatedUser | null = null;
 let customers: Customer[] = [];
@@ -62,9 +86,12 @@ let selectedCustomer: Customer | null = null;
 let priceLists: EligibleOrderPriceList[] = [];
 let selectedPriceList: EligibleOrderPriceList | null = null;
 let cart: CartItem[] = [];
-let savedDraft: OrderDraft | null = null;
+let savedDrafts: OrderDraft[] = [];
 let customerSwitching = false;
 let draftSequence = 0;
+let draftSaveTimer: number | undefined;
+let draftSaveSequence = 0;
+let draftSaveInFlight: Promise<void> | null = null;
 let orderContextSequence = 0;
 let customerTimer: number | undefined;
 let catalogTimer: number | undefined;
@@ -73,6 +100,9 @@ let priceListSequence = 0;
 let catalogSequence = 0;
 let lastSalePriceSequence = 0;
 let lastSalePricesFailed = false;
+let drawerLastSalePriceSequence = 0;
+let drawerLastSalePrices = new Map<string, LastOrderPrice | null>();
+let drawerLastSalePricesFailed = false;
 let catalogPage = 1;
 let catalogPages = 1;
 let initialized = false;
@@ -92,7 +122,6 @@ let quotedViolations: OrderPriceViolation[] = [];
 let approvalAttempt: { fingerprint: string; idempotencyKey: string } | null = null;
 let selectedApproval: MyOrderPriceApprovalDetail | null = null;
 let supersededApprovalId: string | null = null;
-let myApprovals: MyOrderPriceApprovalSummary[] = [];
 const monitoredEmailDeliveries = new Set<string>();
 const emailDeliveryPollIntervalMs = 2_000;
 const emailDeliveryMonitorTimeoutMs = 2 * 60_000;
@@ -179,7 +208,13 @@ function calculationCartItem(detail: CalculationDetail): CartItem {
     code: detail.kitCode,
     description: descriptionWithoutUser(detail.kitDescription),
     price: Number(detail.normalTotal),
-    taxRate: 0,
+    taxRate: Number(detail.ipiRate ?? 0),
+    taxes: defaultTaxes({
+      pis: Number(detail.pisRate ?? 0),
+      cofins: Number(detail.cofinsRate ?? 0),
+      icms: Number(detail.icmsRate ?? 0),
+      ipi: Number(detail.ipiRate ?? 0),
+    }),
     referencePrice: Number(detail.normalTotal),
     priceEdited: false,
     priceReference: 'NORMAL',
@@ -188,6 +223,10 @@ function calculationCartItem(detail: CalculationDetail): CartItem {
     calculatedAt: detail.createdAt,
     minimumPrice: Number(detail.minimumTotal),
     normalPrice: Number(detail.normalTotal),
+    pisRate: Number(detail.pisRate ?? 0),
+    cofinsRate: Number(detail.cofinsRate ?? 0),
+    icmsRate: Number(detail.icmsRate ?? 0),
+    ipiRate: Number(detail.ipiRate ?? 0),
     calculationId: detail.id,
     quantity: 1,
     image: detail.image,
@@ -299,6 +338,12 @@ function orderInput() {
             priceListVersionId: item.sourceVersionId,
             quantity: item.quantity,
             negotiatedUnitPrice: item.price.toFixed(4),
+            appliedTaxes: {
+              pis: ensureTaxes(item).pis.selected,
+              cofins: ensureTaxes(item).cofins.selected,
+              icms: ensureTaxes(item).icms.selected,
+              ipi: ensureTaxes(item).ipi.selected,
+            },
           }
         : {
             kind: item.kind,
@@ -306,6 +351,12 @@ function orderInput() {
             priceReference: item.priceReference as 'MINIMUM' | 'NORMAL',
             quantity: item.quantity,
             negotiatedUnitPrice: item.price.toFixed(4),
+            appliedTaxes: {
+              pis: ensureTaxes(item).pis.selected,
+              cofins: ensureTaxes(item).cofins.selected,
+              icms: ensureTaxes(item).icms.selected,
+              ipi: ensureTaxes(item).ipi.selected,
+            },
           },
     ),
   };
@@ -315,7 +366,7 @@ function reviewFingerprint(): string {
   return JSON.stringify({
     input: orderInput(),
     note: element<HTMLTextAreaElement>('#pedidoObs').value,
-    taxes: cart.map(({ key, taxRate }) => ({ key, taxRate })),
+    taxes: cart.map((item) => ({ key: item.key, taxes: item.taxes ?? null })),
   });
 }
 
@@ -323,18 +374,6 @@ function newIdempotencyKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   const random = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
   return `order:${Date.now().toString(36)}:${random}`;
-}
-
-function approvalStatusLabel(status: MyOrderPriceApprovalSummary['status']): string {
-  return {
-    PENDING: 'Pendente',
-    APPROVED: 'Aprovada',
-    REJECTED: 'Reprovada',
-    CANCELLED: 'Cancelada',
-    SUPERSEDED: 'Substituída',
-    EXPIRED: 'Expirada',
-    CONSUMED: 'Consumida',
-  }[status];
 }
 
 function approvalStatusMessage(approval: MyOrderPriceApprovalSummary): string {
@@ -480,7 +519,7 @@ async function submitApprovalRequest(): Promise<void> {
     closeApprovalModal(false, true);
     setQuoteFeedback(`Solicitação enviada e aguardando análise. Nenhum pedido foi criado.`);
     renderCart();
-    await loadMyApprovals();
+    window.dispatchEvent(new Event('fluair:approval-notifications-refresh'));
   } catch (error) {
     setApprovalStatus(apiMessage(error, 'Não foi possível enviar a solicitação.'), true);
   } finally {
@@ -536,17 +575,24 @@ function renderOrderReview(quote: OrderQuoteEnvelope['data']): void {
     copy.append(title, meta);
     const values = document.createElement('div');
     values.className = 'order-review-item-values';
-    values.textContent = `${line.quantity} × ${money(line.negotiatedUnitPrice)} = ${money(line.subtotal)}`;
-    if (line.kind === 'STANDALONE_PRODUCT') {
+    values.textContent = `${line.quantity} × ${money(line.finalUnitPrice)} = ${money(line.subtotal)}`;
+    if (line.taxes) {
       const taxes = document.createElement('div');
-      taxes.textContent = `IPI ${percentage(line.ipiRate)} · ICMS ${percentage(line.icmsRate)}`;
+      const applied = line.taxes
+        ? (['pis', 'cofins', 'icms', 'ipi'] as const)
+            .filter((code) => line.taxes[code].selected)
+            .map((code) => `${code.toUpperCase()} ${percentage(line.taxes[code].rate)}`)
+        : [];
+      taxes.textContent = line.taxes
+        ? applied.length
+          ? `Base ${money(line.negotiatedUnitPrice)} · ${applied.join(' · ')} · Impostos ${money(line.taxes.totalUnitAmount)}`
+          : `Base ${money(line.negotiatedUnitPrice)} · sem impostos aplicados`
+        : `IPI ${percentage(line.ipiRate)} · ICMS ${percentage(line.icmsRate)}`;
       values.append(taxes);
     }
-    if (line.referenceUnitPrice !== line.negotiatedUnitPrice) {
-      const reference = document.createElement('div');
-      reference.textContent = `Referência: ${money(line.referenceUnitPrice)}`;
-      values.append(reference);
-    }
+    const reference = document.createElement('div');
+    reference.textContent = `Valor de referência: ${money(line.referenceUnitPrice)}`;
+    values.append(reference);
     row.append(copy, values);
     items.append(row);
   }
@@ -666,6 +712,9 @@ async function confirmOrder(): Promise<void> {
   confirm.textContent = 'Registrando pedido…';
   setReviewStatus('Registrando o pedido. Aguarde.');
   try {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveSequence += 1;
+    await draftSaveInFlight;
     const response = await createOrder(
       {
         ...input,
@@ -678,15 +727,16 @@ async function confirmOrder(): Promise<void> {
       activeReview.idempotencyKey,
     );
     const { order, emailDelivery } = response.data;
-    if (savedDraft?.customer.id === selectedCustomer?.id) savedDraft = null;
+    if (selectedCustomer)
+      savedDrafts = savedDrafts.filter((draft) => draft.customer.id !== selectedCustomer?.id);
     selectedApproval = null;
     quotedViolations = [];
     cart = [];
     pendingCalculation = null;
     element<HTMLTextAreaElement>('#pedidoObs').value = '';
     renderCart();
-    renderSavedDraft();
-    void loadMyApprovals();
+    renderSavedDrafts();
+    window.dispatchEvent(new Event('fluair:approval-notifications-refresh'));
     setQuoteFeedback(`Pedido ${order.number} registrado; envio em processamento.`);
     closeOrderReview(false, true);
     element<HTMLButtonElement>('#pedido-client-trigger').focus();
@@ -714,7 +764,7 @@ async function confirmOrder(): Promise<void> {
     ) {
       selectedApproval = null;
       window.sessionStorage.removeItem('order-price-approval-id');
-      void loadMyApprovals();
+      window.dispatchEvent(new Event('fluair:approval-notifications-refresh'));
     }
   } finally {
     reviewSubmitting = false;
@@ -736,6 +786,22 @@ function approvalCart(detail: MyOrderPriceApprovalDetail): CartItem[] {
       description: item.description,
       price: Number(item.negotiatedUnitPrice),
       taxRate: Number(item.ipiRate ?? 0),
+      taxes: item.taxes
+        ? {
+            pis: { selected: item.taxes.pis.selected, rate: Number(item.taxes.pis.rate) },
+            cofins: {
+              selected: item.taxes.cofins.selected,
+              rate: Number(item.taxes.cofins.rate),
+            },
+            icms: { selected: item.taxes.icms.selected, rate: Number(item.taxes.icms.rate) },
+            ipi: { selected: item.taxes.ipi.selected, rate: Number(item.taxes.ipi.rate) },
+          }
+        : defaultTaxes({
+            pis: Number(item.pisRate ?? 0),
+            cofins: Number(item.cofinsRate ?? 0),
+            icms: Number(item.icmsRate ?? 0),
+            ipi: Number(item.ipiRate ?? 0),
+          }),
       referencePrice: Number(item.referenceUnitPrice),
       priceEdited: item.negotiatedUnitPrice !== item.referenceUnitPrice,
       priceReference: item.priceReference,
@@ -756,6 +822,8 @@ function approvalCart(detail: MyOrderPriceApprovalDetail): CartItem[] {
           list: `${item.priceList.name} · comparação`,
           minimumPrice: Number(item.minimumUnitPrice),
           maximumPrice: Number(item.referenceUnitPrice),
+          pisRate: Number(item.pisRate ?? 0),
+          cofinsRate: Number(item.cofinsRate ?? 0),
           ipiRate: Number(item.ipiRate ?? 0),
           icmsRate: Number(item.icmsRate ?? 0),
         },
@@ -763,6 +831,8 @@ function approvalCart(detail: MyOrderPriceApprovalDetail): CartItem[] {
     }
     if (item.ipiRate !== null) restored.ipiRate = Number(item.ipiRate);
     if (item.icmsRate !== null) restored.icmsRate = Number(item.icmsRate);
+    if (item.pisRate != null) restored.pisRate = Number(item.pisRate);
+    if (item.cofinsRate != null) restored.cofinsRate = Number(item.cofinsRate);
     if (item.sourceCalculationVersionId) restored.calculationId = item.sourceCalculationVersionId;
     return restored;
   });
@@ -772,9 +842,11 @@ async function loadApprovalIntoCart(id: string): Promise<void> {
   setQuoteFeedback('Recuperando o carrinho da solicitação…');
   try {
     const detail = (await getMyOrderPriceApproval(id)).data;
-    const customer = (await getCustomer(detail.customer.id)).data.customer;
-    await selectCustomer(customer);
-    if (selectedCustomer?.id !== customer.id) return;
+    if (selectedCustomer?.id !== detail.customer.id) {
+      const customer = (await getCustomer(detail.customer.id)).data.customer;
+      await selectCustomer(customer);
+      if (selectedCustomer?.id !== customer.id) return;
+    }
     selectedApproval = detail;
     window.sessionStorage.setItem('order-price-approval-id', detail.id);
     supersededApprovalId = detail.status === 'PENDING' ? detail.id : null;
@@ -810,93 +882,6 @@ async function loadApprovalIntoCart(id: string): Promise<void> {
     );
   } catch (error) {
     setQuoteFeedback(apiMessage(error, 'Não foi possível recuperar a solicitação.'), true);
-  }
-}
-
-function renderMyApprovals(): void {
-  const container = element<HTMLElement>('#order-approvals-list');
-  clear(container);
-  if (!myApprovals.length) {
-    container.append(state('Você ainda não possui solicitações de aprovação.'));
-    return;
-  }
-  for (const approval of myApprovals) {
-    const card = document.createElement('article');
-    card.className = 'order-approval-card';
-    const head = document.createElement('div');
-    head.className = 'order-approval-card-head';
-    const title = document.createElement('strong');
-    title.textContent = `${approval.customer.code} · ${approval.customer.legalName}`;
-    const status = document.createElement('span');
-    status.className = `order-approval-status ${approval.status.toLowerCase()}`;
-    status.textContent = approvalStatusLabel(approval.status);
-    head.append(title, status);
-    const meta = document.createElement('div');
-    meta.className = 'order-approval-card-meta';
-    meta.textContent = `${new Date(approval.requestedAt).toLocaleString('pt-BR')} · ${approval.itemCount} linhas · impacto ${money(approval.exceptionAmount)}. ${approvalStatusMessage(approval)}`;
-    const actions = document.createElement('div');
-    actions.className = 'order-approval-card-actions';
-    if (approval.status !== 'CONSUMED') {
-      const load = document.createElement('button');
-      load.type = 'button';
-      load.className = 'btn btn-ghost btn-sm';
-      load.textContent =
-        approval.status === 'APPROVED' ? 'Carregar e gerar pedido' : 'Carregar carrinho';
-      load.addEventListener('click', () => void loadApprovalIntoCart(approval.id));
-      actions.append(load);
-    }
-    if (approval.status === 'PENDING') {
-      const cancel = document.createElement('button');
-      cancel.type = 'button';
-      cancel.className = 'btn btn-ghost btn-sm';
-      cancel.textContent = 'Cancelar solicitação';
-      cancel.addEventListener('click', async () => {
-        cancel.disabled = true;
-        try {
-          await cancelMyOrderPriceApproval(approval.id, { expectedVersion: approval.version });
-          if (selectedApproval?.id === approval.id) selectedApproval = null;
-          await loadMyApprovals();
-          setQuoteFeedback('Solicitação cancelada.');
-        } catch (error) {
-          setQuoteFeedback(apiMessage(error, 'Não foi possível cancelar a solicitação.'), true);
-          cancel.disabled = false;
-        }
-      });
-      actions.append(cancel);
-    }
-    card.append(head, meta, actions);
-    container.append(card);
-  }
-}
-
-async function loadMyApprovals(): Promise<void> {
-  const container = element<HTMLElement>('#order-approvals-list');
-  clear(container);
-  container.append(state('Carregando solicitações…'));
-  try {
-    const response = await listMyOrderPriceApprovals({ pageSize: 20 });
-    myApprovals = response.data;
-    renderMyApprovals();
-    if (selectedApproval) {
-      const refreshed = myApprovals.find(({ id }) => id === selectedApproval?.id);
-      if (refreshed && refreshed.version !== selectedApproval.version) {
-        selectedApproval = (await getMyOrderPriceApproval(refreshed.id)).data;
-        renderCart();
-        setQuoteFeedback(approvalStatusMessage(selectedApproval));
-      }
-    }
-    const rememberedId = window.sessionStorage.getItem('order-price-approval-id');
-    if (rememberedId && !selectedApproval && !cart.length) {
-      const remembered = myApprovals.find(({ id }) => id === rememberedId);
-      if (remembered?.status === 'APPROVED') {
-        await loadApprovalIntoCart(rememberedId);
-      }
-    }
-  } catch (error) {
-    clear(container);
-    const failure = state(apiMessage(error, 'Não foi possível carregar suas solicitações.'));
-    failure.classList.add('error');
-    container.append(failure);
   }
 }
 
@@ -942,17 +927,52 @@ function draftPayload() {
   };
 }
 
-function renderSavedDraft(): void {
-  const panel = element<HTMLElement>('#order-saved-draft');
-  const visible = Boolean(savedDraft && savedDraft.customer.id !== selectedCustomer?.id);
-  panel.hidden = !visible;
-  if (!savedDraft || !visible) return;
-  element<HTMLElement>('#order-saved-draft-customer').textContent =
-    `${savedDraft.customer.code} · ${savedDraft.customer.legalName}`;
-  const quantity = orderTotalQuantity(savedDraft.payload.cart);
-  element<HTMLElement>('#order-saved-draft-meta').textContent =
-    `${quantity} ${quantity === 1 ? 'item' : 'itens'} · ${money(orderAmount(savedDraft.payload.cart))} · salvo em ${new Date(savedDraft.updatedAt).toLocaleString('pt-BR')}`;
-  element<HTMLButtonElement>('#order-saved-draft-resume').disabled = !savedDraft.customer.active;
+function showEvictedDraft(draft: OrderDraft | null | undefined): void {
+  if (!draft) return;
+  showNotification(
+    `O pedido em andamento de ${draft.customer.legalName} foi removido para salvar o cliente mais recente.`,
+    'info',
+    7_000,
+  );
+}
+
+function renderSavedDrafts(): void {
+  const panel = element<HTMLElement>('#order-draft-history');
+  const container = element<HTMLElement>('#order-draft-tabs');
+  panel.hidden = !savedDrafts.length;
+  clear(container);
+  if (!savedDrafts.length) return;
+
+  savedDrafts.forEach((draft) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'order-draft-tab-wrap';
+    const active = draft.customer.id === selectedCustomer?.id;
+    wrapper.classList.toggle('active', active);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'order-draft-tab';
+    button.disabled = !draft.customer.active;
+    button.setAttribute('aria-pressed', String(active));
+    button.setAttribute('aria-label', `Retomar pedido de ${draft.customer.legalName}`);
+    button.title = `${draft.customer.code} · ${draft.customer.legalName}`;
+    const name = document.createElement('span');
+    name.className = 'order-draft-tab-name';
+    name.textContent = customerDraftLabel(draft.customer.code, draft.customer.legalName);
+    const quantity = document.createElement('span');
+    quantity.className = 'order-draft-tab-count';
+    quantity.textContent = String(orderTotalQuantity(draft.payload.cart));
+    button.append(name, quantity);
+    button.addEventListener('click', () => void resumeSavedDraft(draft));
+    const discard = document.createElement('button');
+    discard.type = 'button';
+    discard.className = 'order-draft-tab-discard';
+    discard.textContent = '×';
+    discard.setAttribute('aria-label', `Descartar pedido de ${draft.customer.legalName}`);
+    discard.title = `Descartar pedido de ${draft.customer.legalName}`;
+    discard.addEventListener('click', () => void discardSavedDraft(draft));
+    wrapper.append(button, discard);
+    container.append(wrapper);
+  });
 }
 
 async function loadSavedDraft(): Promise<void> {
@@ -960,13 +980,13 @@ async function loadSavedDraft(): Promise<void> {
   try {
     const response = await loadOrderDraft();
     if (sequence !== draftSequence) return;
-    savedDraft = response.data.draft;
-    renderSavedDraft();
+    savedDrafts = response.data.drafts ?? (response.data.draft ? [response.data.draft] : []);
+    renderSavedDrafts();
     renderCustomers(customers.length);
   } catch (error) {
     if (sequence !== draftSequence) return;
-    savedDraft = null;
-    renderSavedDraft();
+    savedDrafts = [];
+    renderSavedDrafts();
     setRangeWarning(apiMessage(error, 'Não foi possível consultar o pedido anterior salvo.'));
   }
 }
@@ -984,32 +1004,90 @@ async function restoreDraftApproval(id: string): Promise<void> {
   }
 }
 
-async function discardSavedDraft(): Promise<void> {
-  if (!savedDraft || !window.confirm('Descartar o pedido anterior salvo?')) return;
-  const customerId = savedDraft.customer.id;
+async function discardSavedDraft(draft: OrderDraft): Promise<void> {
+  if (!window.confirm(`Descartar o pedido em andamento de ${draft.customer.legalName}?`)) return;
+  const customerId = draft.customer.id;
   try {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveSequence += 1;
+    await draftSaveInFlight;
     await deleteOrderDraft(customerId);
-    savedDraft = null;
-    renderSavedDraft();
+    savedDrafts = savedDrafts.filter((item) => item.customer.id !== customerId);
+    if (selectedCustomer?.id === customerId) {
+      selectedCustomer = null;
+      selectedPriceList = null;
+      selectedApproval = null;
+      pendingCalculation = null;
+      cart = [];
+      window.sessionStorage.removeItem('order-price-approval-id');
+      element<HTMLTextAreaElement>('#pedidoObs').value = '';
+      syncSelectedCustomer();
+      renderCart();
+      void loadCatalog();
+    } else if (selectedCustomer && cart.length) {
+      scheduleDraftAutosave();
+    }
+    renderSavedDrafts();
     renderCustomers(customers.length);
-    showNotification('Pedido anterior descartado.', 'info');
+    showNotification('Pedido em andamento descartado.', 'info');
   } catch (error) {
     setRangeWarning(apiMessage(error, 'Não foi possível descartar o pedido anterior.'));
   }
 }
 
-async function resumeSavedDraft(): Promise<void> {
-  if (!savedDraft || !savedDraft.customer.active) return;
+async function resumeSavedDraft(draft: OrderDraft): Promise<void> {
+  if (!draft.customer.active || draft.customer.id === selectedCustomer?.id) return;
   try {
-    const customer = (await getCustomer(savedDraft.customer.id)).data.customer;
+    const customer = (await getCustomer(draft.customer.id)).data.customer;
     await selectCustomer(customer);
   } catch (error) {
     setRangeWarning(apiMessage(error, 'Não foi possível retomar o pedido anterior.'));
   }
 }
 
+async function saveActiveDraft(sequence: number): Promise<void> {
+  const customer = selectedCustomer;
+  if (!customer || customerSwitching) return;
+  if (!cart.length) {
+    if (!savedDrafts.some((draft) => draft.customer.id === customer.id)) return;
+    try {
+      await deleteOrderDraft(customer.id);
+      if (sequence !== draftSaveSequence || selectedCustomer?.id !== customer.id) return;
+      savedDrafts = savedDrafts.filter((draft) => draft.customer.id !== customer.id);
+      renderSavedDrafts();
+    } catch (error) {
+      setRangeWarning(apiMessage(error, 'Não foi possível atualizar o histórico de pedidos.'));
+    }
+    return;
+  }
+  try {
+    const response = await saveOrderDraft({ customerId: customer.id, payload: draftPayload() });
+    if (sequence !== draftSaveSequence || selectedCustomer?.id !== customer.id) return;
+    savedDrafts = response.data.drafts ?? (response.data.draft ? [response.data.draft] : []);
+    showEvictedDraft(response.data.evicted);
+    renderSavedDrafts();
+    renderCustomers(customers.length);
+  } catch (error) {
+    setRangeWarning(apiMessage(error, 'Não foi possível salvar o pedido automaticamente.'));
+  }
+}
+
+function scheduleDraftAutosave(): void {
+  window.clearTimeout(draftSaveTimer);
+  const sequence = ++draftSaveSequence;
+  draftSaveTimer = window.setTimeout(() => {
+    const pending = saveActiveDraft(sequence);
+    draftSaveInFlight = pending;
+    void pending.finally(() => {
+      if (draftSaveInFlight === pending) draftSaveInFlight = null;
+    });
+  }, 700);
+}
+
 async function clearSelectedCustomer(): Promise<void> {
   if (!selectedCustomer || customerSwitching) return;
+  window.clearTimeout(draftSaveTimer);
+  draftSaveSequence += 1;
   const customer = selectedCustomer;
   const hadOrder = cart.length > 0;
 
@@ -1017,11 +1095,13 @@ async function clearSelectedCustomer(): Promise<void> {
     customerSwitching = true;
     setRangeWarning('Salvando o pedido em montagem…');
     try {
+      await draftSaveInFlight;
       const response = await saveOrderDraft({
         customerId: customer.id,
         payload: draftPayload(),
       });
-      savedDraft = response.data.draft;
+      savedDrafts = response.data.drafts ?? (response.data.draft ? [response.data.draft] : []);
+      showEvictedDraft(response.data.evicted);
     } catch (error) {
       setRangeWarning(
         apiMessage(error, 'Não foi possível salvar o pedido. O cliente não foi removido.'),
@@ -1045,13 +1125,15 @@ async function clearSelectedCustomer(): Promise<void> {
   invalidateQuote();
   renderCart();
   void loadCatalog();
-  renderSavedDraft();
+  renderSavedDrafts();
   customerSwitching = false;
   element<HTMLButtonElement>('#pedido-client-trigger').focus();
 }
 
 async function selectCustomer(customer: Customer): Promise<void> {
   if (customerSwitching) return;
+  window.clearTimeout(draftSaveTimer);
+  draftSaveSequence += 1;
   const hadPreviousCustomer = Boolean(selectedCustomer);
   const changed = selectedCustomer?.id !== customer.id;
   if (!changed) {
@@ -1064,6 +1146,7 @@ async function selectCustomer(customer: Customer): Promise<void> {
   setRangeWarning(previousHadOrder ? 'Salvando o pedido anterior…' : 'Carregando pedido…');
   let restored: OrderDraft | null = null;
   try {
+    await draftSaveInFlight;
     const response = await swapOrderDraft({
       targetCustomerId: customer.id,
       ...(previousHadOrder && previousCustomer
@@ -1071,7 +1154,8 @@ async function selectCustomer(customer: Customer): Promise<void> {
         : {}),
     });
     restored = response.data.restored;
-    savedDraft = response.data.draft;
+    savedDrafts = response.data.drafts ?? (response.data.draft ? [response.data.draft] : []);
+    showEvictedDraft(response.data.evicted);
   } catch (error) {
     setRangeWarning(
       apiMessage(error, 'Não foi possível salvar o pedido anterior. O cliente não foi alterado.'),
@@ -1110,7 +1194,7 @@ async function selectCustomer(customer: Customer): Promise<void> {
   );
   renderCart();
   void refreshLastSalePrices();
-  renderSavedDraft();
+  renderSavedDrafts();
   void loadCatalog();
   if (restored?.payload.approvalRequestId)
     void restoreDraftApproval(restored.payload.approvalRequestId);
@@ -1136,10 +1220,13 @@ function customerOption(customer: Customer): HTMLButtonElement {
   meta.className = 'cliente-option-meta';
   meta.textContent = customerDetails(customer);
   main.append(name, meta);
-  if (savedDraft?.customer.id === customer.id && selectedCustomer?.id !== customer.id) {
+  if (
+    savedDrafts.some((draft) => draft.customer.id === customer.id) &&
+    selectedCustomer?.id !== customer.id
+  ) {
     const saved = document.createElement('small');
     saved.className = 'order-customer-draft-label';
-    saved.textContent = 'Pedido anterior salvo';
+    saved.textContent = 'Pedido em andamento';
     main.append(saved);
   }
   const tag = document.createElement('div');
@@ -1366,6 +1453,7 @@ function revalidateAfterCartChange(): void {
   invalidateQuote();
   renderCart();
   void refreshLastSalePrices();
+  scheduleDraftAutosave();
 }
 
 async function refreshLastSalePrices(): Promise<void> {
@@ -1396,6 +1484,60 @@ async function refreshLastSalePrices(): Promise<void> {
     for (const item of cart) delete item.lastOrderPrice;
     lastSalePricesFailed = true;
     renderCart();
+  }
+}
+
+function catalogLastSaleKey(item: CatalogItem): string {
+  return item.kind === 'KIT' ? `kit:${item.calculationId}` : `product:${item.code}`;
+}
+
+async function refreshDrawerLastSalePrices(
+  items: CatalogItem[],
+  catalogRequestSequence: number,
+): Promise<void> {
+  const sequence = ++drawerLastSalePriceSequence;
+  const customer = selectedCustomer;
+  drawerLastSalePrices = new Map();
+  drawerLastSalePricesFailed = false;
+  renderDrawerCatalog();
+  if (!customer || !items.length) return;
+
+  try {
+    const response = await loadLastSalePrices({
+      customerId: customer.id,
+      lines: items.map((item) =>
+        item.kind === 'KIT'
+          ? {
+              key: catalogLastSaleKey(item),
+              kind: item.kind,
+              calculationId: item.calculationId,
+            }
+          : {
+              key: catalogLastSaleKey(item),
+              kind: item.kind,
+              productCode: item.code,
+            },
+      ),
+    });
+    if (
+      sequence !== drawerLastSalePriceSequence ||
+      catalogRequestSequence !== catalogSequence ||
+      selectedCustomer?.id !== customer.id
+    )
+      return;
+    drawerLastSalePrices = new Map(
+      response.data.prices.map((item) => [item.key, item.lastOrderPrice] as const),
+    );
+    renderDrawerCatalog();
+  } catch {
+    if (
+      sequence !== drawerLastSalePriceSequence ||
+      catalogRequestSequence !== catalogSequence ||
+      selectedCustomer?.id !== customer.id
+    )
+      return;
+    drawerLastSalePricesFailed = true;
+    renderDrawerCatalog();
   }
 }
 
@@ -1431,6 +1573,21 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
   description.textContent = descriptionWithoutUser(item.description);
   const source = document.createElement('div');
   source.className = 'order-source';
+  const lastSale = document.createElement('div');
+  lastSale.className = 'order-card-last-price';
+  if (selectedCustomer) {
+    const lastOrderPrice = drawerLastSalePrices.get(catalogLastSaleKey(item));
+    lastSale.textContent = drawerLastSalePricesFailed
+      ? 'Última venda indisponível'
+      : lastOrderPrice === undefined
+        ? 'Consultando última venda…'
+        : lastOrderPrice
+          ? `Última venda: ${money(lastOrderPrice.unitPrice)}`
+          : 'Ainda não vendido para este cliente';
+    if (lastOrderPrice) {
+      lastSale.title = `${lastOrderPrice.orderNumber} · ${date(lastOrderPrice.orderedAt)}`;
+    }
+  }
   const prices = document.createElement('div');
   prices.className = 'order-card-prices';
   const priceInfo = (label: string, value: number | string): HTMLSpanElement => {
@@ -1448,6 +1605,8 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       list: range.priceList.name,
       minimumPrice: Number(range.minimumPrice),
       maximumPrice: Number(range.maximumPrice),
+      pisRate: Number(range.pisRate ?? 0),
+      cofinsRate: Number(range.cofinsRate ?? 0),
       ipiRate: Number(range.ipiRate ?? 0),
       icmsRate: Number(range.icmsRate ?? 0),
     }));
@@ -1458,6 +1617,12 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       description: descriptionWithoutUser(item.description),
       price: Number(range?.maximumPrice ?? item.unitPrice),
       taxRate: Number(range?.ipiRate ?? item.ipiRate ?? 0),
+      taxes: defaultTaxes({
+        pis: Number(range?.pisRate ?? item.pisRate ?? 0),
+        cofins: Number(range?.cofinsRate ?? item.cofinsRate ?? 0),
+        icms: Number(range?.icmsRate ?? item.icmsRate ?? 0),
+        ipi: Number(range?.ipiRate ?? item.ipiRate ?? 0),
+      }),
       referencePrice: Number(range?.maximumPrice ?? item.unitPrice),
       priceEdited: false,
       priceReference: 'UNIT',
@@ -1474,6 +1639,8 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       priceRanges: cartRanges,
       ipiRate: Number(range?.ipiRate ?? item.ipiRate ?? 0),
       icmsRate: Number(range?.icmsRate ?? item.icmsRate ?? 0),
+      pisRate: Number(range?.pisRate ?? item.pisRate ?? 0),
+      cofinsRate: Number(range?.cofinsRate ?? item.cofinsRate ?? 0),
       quantity: 1,
       image: item.image ?? null,
     });
@@ -1488,7 +1655,7 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
     })) {
       const price = document.createElement('button');
       price.type = 'button';
-      price.className = 'order-card-price order-card-price-range';
+      price.className = 'order-card-price order-card-price-range reference-price';
       price.textContent = `${compactRangeLabel(range.minimumOrderQuantity, range.maximumOrderQuantity, range.priceList.name)}: ${money(range.maximumPrice)}`;
       price.title = range.priceList.name;
       price.disabled = !canAdd;
@@ -1512,7 +1679,13 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       code: item.code,
       description: descriptionWithoutUser(item.description),
       price: Number(item.normalPrice),
-      taxRate: 0,
+      taxRate: Number(item.ipiRate ?? 0),
+      taxes: defaultTaxes({
+        pis: Number(item.pisRate ?? 0),
+        cofins: Number(item.cofinsRate ?? 0),
+        icms: Number(item.icmsRate ?? 0),
+        ipi: Number(item.ipiRate ?? 0),
+      }),
       referencePrice: Number(item.normalPrice),
       priceEdited: false,
       priceReference: 'NORMAL',
@@ -1521,6 +1694,10 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       calculatedAt: item.calculatedAt,
       minimumPrice: Number(item.minimumPrice),
       normalPrice: Number(item.normalPrice),
+      pisRate: Number(item.pisRate ?? 0),
+      cofinsRate: Number(item.cofinsRate ?? 0),
+      icmsRate: Number(item.icmsRate ?? 0),
+      ipiRate: Number(item.ipiRate ?? 0),
       calculationId: item.calculationId,
       quantity: 1,
       image: item.image ?? null,
@@ -1534,6 +1711,7 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       ? 'Clique em um valor para adicionar ao pedido'
       : 'Clique para adicionar ao pedido';
   card.append(source);
+  if (selectedCustomer) card.append(lastSale);
   card.append(prices);
   card.append(hint);
   const add = (): void => {
@@ -1615,6 +1793,7 @@ async function loadSavedCatalog(customerId?: string): Promise<void> {
     const items: CatalogItem[] = [...response.data.kits];
     setVisibleCatalogItems(items);
     renderDrawerCatalog();
+    void refreshDrawerLastSalePrices(items, sequence);
     catalogPages = Math.max(
       response.pagination.calculatedProductTotalPages,
       response.pagination.kitTotalPages ?? 1,
@@ -1660,6 +1839,7 @@ async function loadCatalog(): Promise<void> {
     const items: CatalogItem[] = [...response.data.kits, ...response.data.products];
     setVisibleCatalogItems(items);
     renderDrawerCatalog();
+    void refreshDrawerLastSalePrices(items, sequence);
     catalogPages = Math.max(
       response.pagination.productTotalPages,
       response.pagination.kitTotalPages,
@@ -1769,7 +1949,7 @@ function renderCart(): void {
           list.textContent = range.list;
           priceRange.append(
             list,
-            ` · Mínimo ${money(range.minimumPrice)} · Máximo ${money(range.maximumPrice)} · IPI ${percentage(range.ipiRate)} · ICMS ${percentage(range.icmsRate)}`,
+            ` · Mínimo ${money(range.minimumPrice)} · Máximo ${money(range.maximumPrice)} · PIS ${percentage(range.pisRate)} · Cofins ${percentage(range.cofinsRate)} · ICMS ${percentage(range.icmsRate)} · IPI ${percentage(range.ipiRate)}`,
           );
           referencePrices.append(priceRange);
         }
@@ -1790,19 +1970,15 @@ function renderCart(): void {
       exception.textContent = `Exceção de preço: mínimo ${money(violation.minimumUnitPrice)}, solicitado ${money(violation.negotiatedUnitPrice)}, diferença total ${money(violation.totalDifference)} (${percentage(violation.differencePercentage)}).`;
       source.append(exception);
     }
-    if (
-      item.kind === 'STANDALONE_PRODUCT' &&
-      item.ipiRate !== undefined &&
-      item.icmsRate !== undefined
-    ) {
+    if (item.ipiRate !== undefined && item.icmsRate !== undefined) {
       const tax = document.createElement('span');
       tax.className = 'order-cart-tax';
-      tax.textContent = `Impostos da lista selecionada: IPI ${percentage(item.ipiRate)} · ICMS ${percentage(item.icmsRate)}`;
+      tax.textContent = `Impostos da lista selecionada: PIS ${percentage(item.pisRate ?? 0)} · Cofins ${percentage(item.cofinsRate ?? 0)} · ICMS ${percentage(item.icmsRate)} · IPI ${percentage(item.ipiRate)}`;
       source.append(tax);
     }
     const controls = document.createElement('div');
     controls.className = 'order-cart-controls';
-    controls.classList.toggle('has-tax', item.kind === 'STANDALONE_PRODUCT');
+    controls.classList.add('has-tax');
     const quantityField = document.createElement('div');
     quantityField.className = 'order-cart-field';
     const quantityLabel = document.createElement('label');
@@ -1822,7 +1998,7 @@ function renderCart(): void {
     const priceField = document.createElement('div');
     priceField.className = 'order-cart-field';
     const priceLabel = document.createElement('label');
-    priceLabel.textContent = `Preço unitário · ref. ${money(item.referencePrice)}`;
+    priceLabel.textContent = `Preço-base unitário · ref. ${money(item.referencePrice)}`;
     const price = document.createElement('input');
     price.className = 'inp';
     price.type = 'text';
@@ -1838,46 +2014,61 @@ function renderCart(): void {
       if (parsed === null) return;
       item.price = parsed;
       item.priceEdited = Math.abs(item.price - item.referencePrice) > 0.0001;
-      subtotal.textContent = money(orderLineAmount(item));
+      subtotal.textContent = `Impostos ${money(orderTaxUnitAmount(item))} · Unitário final ${money(orderUnitAmount(item))} · Total ${money(orderLineAmount(item))}`;
       updateCartSummary();
+      scheduleDraftAutosave();
     });
     price.addEventListener('change', () => {
       const parsed = parseMoney(price.value);
       item.price = parsed ?? item.referencePrice;
       item.priceEdited = Math.abs(item.price - item.referencePrice) > 0.0001;
       renderCart();
+      scheduleDraftAutosave();
     });
     priceField.append(priceLabel, price);
     const taxField = document.createElement('div');
     taxField.className = 'order-cart-field order-cart-tax-field';
     const taxLabel = document.createElement('label');
-    taxLabel.textContent = 'Imposto (%)';
-    const tax = document.createElement('input');
-    tax.className = 'inp';
-    tax.type = 'number';
-    tax.inputMode = 'decimal';
-    tax.min = '0';
-    tax.step = '0.01';
-    tax.value = item.taxRate.toFixed(2);
-    tax.setAttribute('aria-label', `Imposto percentual de ${item.code}`);
-    tax.disabled = item.kind !== 'STANDALONE_PRODUCT';
-    tax.addEventListener('input', () => {
-      invalidateQuote();
-      const parsed = parsePercentage(tax.value);
-      if (parsed === null) return;
-      item.taxRate = parsed;
-    });
-    tax.addEventListener('change', () => {
-      item.taxRate = parsePercentage(tax.value) ?? 0;
-      renderCart();
-    });
-    taxField.append(taxLabel, tax);
+    taxLabel.textContent = 'Somar impostos ao preço-base';
+    const taxOptions = document.createElement('div');
+    taxOptions.className = 'order-cart-tax-options';
+    taxOptions.setAttribute('role', 'group');
+    taxOptions.setAttribute('aria-label', 'Somar impostos ao preço-base');
+    taxField.append(taxLabel, taxOptions);
+    {
+      const taxes = ensureTaxes(item);
+      const labels: Array<[keyof typeof taxes, string]> = [
+        ['pis', 'PIS'],
+        ['cofins', 'Cofins'],
+        ['icms', 'ICMS'],
+        ['ipi', 'IPI'],
+      ];
+      for (const [code, caption] of labels) {
+        const option = document.createElement('label');
+        option.className = 'order-cart-tax-option';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = taxes[code].selected;
+        checkbox.setAttribute(
+          'aria-label',
+          `Aplicar ${caption} de ${percentage(taxes[code].rate)} em ${item.code}`,
+        );
+        checkbox.addEventListener('change', () => {
+          taxes[code].selected = checkbox.checked;
+          invalidateQuote();
+          renderCart();
+          scheduleDraftAutosave();
+        });
+        option.append(checkbox, `${caption} ${percentage(taxes[code].rate)}`);
+        taxOptions.append(option);
+      }
+    }
     const subtotal = document.createElement('div');
     subtotal.className = 'order-cart-subtotal';
-    subtotal.setAttribute('aria-label', `Subtotal de ${item.code}, sem reaplicar o imposto`);
-    subtotal.textContent = money(orderLineAmount(item));
+    subtotal.setAttribute('aria-label', `Total do item ${item.code}`);
+    subtotal.textContent = `Impostos ${money(orderTaxUnitAmount(item))} · Unitário final ${money(orderUnitAmount(item))} · Total ${money(orderLineAmount(item))}`;
     controls.append(quantityField, priceField);
-    if (item.kind === 'STANDALONE_PRODUCT') controls.append(taxField);
+    controls.append(taxField);
     controls.append(subtotal);
     itemCopy.append(description, source);
     itemSummary.append(itemCopy);
@@ -1894,11 +2085,6 @@ function parseMoney(value: string): number | null {
     .replace(/\.(?=\d{3}(?:\D|$))/g, '')
     .replace(',', '.');
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function parsePercentage(value: string): number | null {
-  const parsed = Number(value.trim().replace(',', '.'));
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
@@ -1945,9 +2131,22 @@ async function reviewOrder(): Promise<void> {
       item.maximumOrderQuantity = quoted.priceList.maximumOrderQuantity ?? null;
       item.minimumPrice = Number(quoted.minimumReferencePrice ?? item.minimumPrice ?? 0);
       item.image = quoted.image;
-      if (quoted.kind === 'STANDALONE_PRODUCT') {
+      {
+        item.pisRate = Number(quoted.pisRate ?? 0);
+        item.cofinsRate = Number(quoted.cofinsRate ?? 0);
         item.ipiRate = Number(quoted.ipiRate ?? 0);
         item.icmsRate = Number(quoted.icmsRate ?? 0);
+        if (quoted.taxes) {
+          item.taxes = {
+            pis: { selected: quoted.taxes.pis.selected, rate: Number(quoted.taxes.pis.rate) },
+            cofins: {
+              selected: quoted.taxes.cofins.selected,
+              rate: Number(quoted.taxes.cofins.rate),
+            },
+            icms: { selected: quoted.taxes.icms.selected, rate: Number(quoted.taxes.icms.rate) },
+            ipi: { selected: quoted.taxes.ipi.selected, rate: Number(quoted.taxes.ipi.rate) },
+          };
+        }
       }
       item.source =
         quoted.kind === 'STANDALONE_PRODUCT'
@@ -2002,12 +2201,6 @@ export function initializeOrdersPage(): void {
   element<HTMLButtonElement>('#pedido-client-clear').addEventListener('click', () => {
     void clearSelectedCustomer();
   });
-  element<HTMLButtonElement>('#order-saved-draft-resume').addEventListener('click', () => {
-    void resumeSavedDraft();
-  });
-  element<HTMLButtonElement>('#order-saved-draft-discard').addEventListener('click', () => {
-    void discardSavedDraft();
-  });
   element<HTMLButtonElement>('#order-customer-add').addEventListener('click', () => {
     void openPreRegistration();
   });
@@ -2041,10 +2234,6 @@ export function initializeOrdersPage(): void {
     }
   });
   element<HTMLButtonElement>('#order-review').addEventListener('click', () => void reviewOrder());
-  element<HTMLButtonElement>('#order-approvals-reload').addEventListener(
-    'click',
-    () => void loadMyApprovals(),
-  );
   element<HTMLButtonElement>('#order-approval-submit').addEventListener(
     'click',
     () => void submitApprovalRequest(),
@@ -2062,7 +2251,10 @@ export function initializeOrdersPage(): void {
   element<HTMLElement>('#order-review-modal').addEventListener('click', (event) => {
     if (event.target === event.currentTarget) closeOrderReview();
   });
-  element<HTMLTextAreaElement>('#pedidoObs').addEventListener('input', invalidateQuote);
+  element<HTMLTextAreaElement>('#pedidoObs').addEventListener('input', () => {
+    invalidateQuote();
+    scheduleDraftAutosave();
+  });
   element<HTMLButtonElement>('#order-drawer-open').addEventListener('click', () => {
     drawerFilter = 'ALL';
     catalogPage = 1;
@@ -2097,6 +2289,18 @@ export function initializeOrdersPage(): void {
   });
   document.addEventListener('click', (event) => {
     if (!picker.contains(event.target as Node)) setPickerOpen(false);
+  });
+  window.addEventListener('fluair:approval-cancelled', (event) => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (!id || selectedApproval?.id !== id) return;
+    selectedApproval = null;
+    window.sessionStorage.removeItem('order-price-approval-id');
+    renderCart();
+    setQuoteFeedback('Solicitação cancelada.');
+  });
+  window.addEventListener('fluair:approval-resume', (event) => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (id) void loadApprovalIntoCart(id);
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && picker.classList.contains('open')) setPickerOpen(false);
@@ -2160,7 +2364,7 @@ export function showOrdersPage(user: AuthenticatedUser): void {
     selectedCustomer = null;
     selectedPriceList = null;
     cart = [];
-    savedDraft = null;
+    savedDrafts = [];
     selectedApproval = null;
     pendingCalculation = null;
     quotedViolations = [];
@@ -2168,7 +2372,7 @@ export function showOrdersPage(user: AuthenticatedUser): void {
     element<HTMLTextAreaElement>('#pedidoObs').value = '';
     syncSelectedCustomer();
     renderCart();
-    renderSavedDraft();
+    renderSavedDrafts();
   }
   element<HTMLButtonElement>('#order-customer-add').hidden = !canManageCustomers();
   syncBackButton();
@@ -2179,9 +2383,10 @@ export function showOrdersPage(user: AuthenticatedUser): void {
   element<HTMLButtonElement>('#order-reload-lists').hidden = !selectedCustomer;
   void loadCustomers();
   void loadSavedDraft();
-  void loadMyApprovals();
   const query = new URLSearchParams(window.location.search);
+  const approvalId = query.get('aprovacao');
   const calculationId = query.get('calculo');
   const customerId = query.get('cliente');
+  if (approvalId) void loadApprovalIntoCart(approvalId);
   void loadOrderContext(calculationId, customerId);
 }

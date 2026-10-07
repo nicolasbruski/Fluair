@@ -26,6 +26,20 @@ const descriptions: Record<PermissionCode, string> = {
   'commission.access': 'Acessar o sistema de comissões.',
 };
 
+const consultationPermissions = [
+  'calculation.view',
+  'calculation.history',
+  'order.access',
+  'price.view',
+  'price.override',
+  'customer.view',
+] satisfies PermissionCode[];
+
+const sellerPermissions = [
+  ...consultationPermissions,
+  'calculation.export',
+] satisfies PermissionCode[];
+
 const roleTemplates = [
   {
     code: ROLE_CODES.administrator,
@@ -35,19 +49,15 @@ const roleTemplates = [
   },
   {
     code: ROLE_CODES.calculationOperator,
-    name: 'Operador de cálculo',
-    description: 'Consulta, abre histórico e exporta resultados existentes.',
-    permissions: [
-      'calculation.view',
-      'calculation.history',
-      'calculation.export',
-    ] satisfies PermissionCode[],
+    name: 'Vendedor',
+    description: 'Consulta o catálogo e clientes, negocia preços e monta pedidos.',
+    permissions: sellerPermissions,
   },
   {
     code: ROLE_CODES.readOnly,
     name: 'Consulta',
     description: 'Consulta cálculos e históricos; exportação é concessão individual opcional.',
-    permissions: ['calculation.view', 'calculation.history'] satisfies PermissionCode[],
+    permissions: consultationPermissions,
   },
 ] as const;
 

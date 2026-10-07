@@ -60,6 +60,7 @@ export interface OrderPriceApprovalsRepository {
   listOwned(input: {
     requesterId: string;
     status?: OrderPriceApprovalStatusCode;
+    requestedFrom?: Date;
     page: number;
     pageSize: number;
   }): Promise<OrderPriceApprovalListEnvelope<MyOrderPriceApprovalSummary>>;
@@ -160,10 +161,42 @@ function itemFromRow(item: ApprovalRow['items'][number]): OrderPriceApprovalItem
     referenceUnitPrice: item.referenceUnitPrice.toFixed(4),
     minimumUnitPrice: item.minimumUnitPrice.toFixed(4),
     negotiatedUnitPrice: item.negotiatedUnitPrice.toFixed(4),
+    finalUnitPrice: item.finalUnitPrice.toFixed(4),
+    taxes:
+      item.pisRate !== null ||
+      item.cofinsRate !== null ||
+      item.icmsRate !== null ||
+      item.ipiRate !== null
+        ? {
+            pis: {
+              selected: item.pisSelected,
+              rate: item.pisRate?.toFixed(4) ?? '0.0000',
+              unitAmount: item.pisUnitAmount?.toFixed(4) ?? '0.0000',
+            },
+            cofins: {
+              selected: item.cofinsSelected,
+              rate: item.cofinsRate?.toFixed(4) ?? '0.0000',
+              unitAmount: item.cofinsUnitAmount?.toFixed(4) ?? '0.0000',
+            },
+            icms: {
+              selected: item.icmsSelected,
+              rate: item.icmsRate?.toFixed(4) ?? '0.0000',
+              unitAmount: item.icmsUnitAmount?.toFixed(4) ?? '0.0000',
+            },
+            ipi: {
+              selected: item.ipiSelected,
+              rate: item.ipiRate?.toFixed(4) ?? '0.0000',
+              unitAmount: item.ipiUnitAmount?.toFixed(4) ?? '0.0000',
+            },
+            totalUnitAmount: item.totalTaxUnitAmount.toFixed(4),
+          }
+        : null,
     minimumSubtotal: item.minimumSubtotal.toFixed(4),
     negotiatedSubtotal: item.negotiatedSubtotal.toFixed(4),
     exceptionUnitAmount: item.exceptionUnitAmount.toFixed(4),
     exceptionTotalAmount: item.exceptionTotalAmount.toFixed(4),
+    pisRate: item.pisRate?.toFixed(4) ?? null,
+    cofinsRate: item.cofinsRate?.toFixed(4) ?? null,
     ipiRate: item.ipiRate?.toFixed(4) ?? null,
     icmsRate: item.icmsRate?.toFixed(4) ?? null,
   };
@@ -394,12 +427,39 @@ export class PrismaOrderPriceApprovalsRepository implements OrderPriceApprovalsR
                   referenceUnitPrice: decimal(item.referenceUnitPrice, 'referenceUnitPrice'),
                   minimumUnitPrice: decimal(item.minimumUnitPrice, 'minimumUnitPrice'),
                   negotiatedUnitPrice: decimal(item.negotiatedUnitPrice, 'negotiatedUnitPrice'),
+                  finalUnitPrice: decimal(
+                    item.finalUnitPrice ?? item.negotiatedUnitPrice,
+                    'finalUnitPrice',
+                  ),
                   minimumSubtotal: decimal(item.minimumSubtotal, 'minimumSubtotal'),
                   negotiatedSubtotal: decimal(item.negotiatedSubtotal, 'negotiatedSubtotal'),
                   exceptionUnitAmount: decimal(item.exceptionUnitAmount, 'exceptionUnitAmount'),
                   exceptionTotalAmount: decimal(item.exceptionTotalAmount, 'exceptionTotalAmount'),
+                  pisSelected: item.taxes?.pis.selected ?? false,
+                  pisRate: item.pisRate == null ? null : decimal(item.pisRate, 'pisRate'),
+                  pisUnitAmount: item.taxes
+                    ? decimal(item.taxes.pis.unitAmount, 'pisUnitAmount')
+                    : null,
+                  cofinsSelected: item.taxes?.cofins.selected ?? false,
+                  cofinsRate:
+                    item.cofinsRate == null ? null : decimal(item.cofinsRate, 'cofinsRate'),
+                  cofinsUnitAmount: item.taxes
+                    ? decimal(item.taxes.cofins.unitAmount, 'cofinsUnitAmount')
+                    : null,
+                  icmsSelected: item.taxes?.icms.selected ?? false,
                   ipiRate: item.ipiRate === null ? null : decimal(item.ipiRate, 'ipiRate'),
+                  ipiSelected: item.taxes?.ipi.selected ?? false,
+                  ipiUnitAmount: item.taxes
+                    ? decimal(item.taxes.ipi.unitAmount, 'ipiUnitAmount')
+                    : null,
                   icmsRate: item.icmsRate === null ? null : decimal(item.icmsRate, 'icmsRate'),
+                  icmsUnitAmount: item.taxes
+                    ? decimal(item.taxes.icms.unitAmount, 'icmsUnitAmount')
+                    : null,
+                  totalTaxUnitAmount: decimal(
+                    item.taxes?.totalUnitAmount ?? '0',
+                    'totalTaxUnitAmount',
+                  ),
                   createdAt: now,
                 })),
               },
@@ -484,12 +544,14 @@ export class PrismaOrderPriceApprovalsRepository implements OrderPriceApprovalsR
   async listOwned(input: {
     requesterId: string;
     status?: OrderPriceApprovalStatusCode;
+    requestedFrom?: Date;
     page: number;
     pageSize: number;
   }): Promise<OrderPriceApprovalListEnvelope<MyOrderPriceApprovalSummary>> {
     const where = {
       requestedByUserId: input.requesterId,
       ...(input.status ? { status: input.status } : {}),
+      ...(input.requestedFrom ? { requestedAt: { gte: input.requestedFrom } } : {}),
     } satisfies Prisma.OrderPriceApprovalRequestWhereInput;
     const [total, rows] = await Promise.all([
       this.prisma.orderPriceApprovalRequest.count({ where }),

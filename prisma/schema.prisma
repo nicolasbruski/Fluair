@@ -28,7 +28,7 @@ model User {
   orders                  Order[]                     @relation("OrderCreator")
   requestedPriceApprovals OrderPriceApprovalRequest[] @relation("PriceApprovalRequester")
   reviewedPriceApprovals  OrderPriceApprovalRequest[] @relation("PriceApprovalReviewer")
-  orderDraft              OrderDraft?
+  orderDrafts             OrderDraft[]
 
   @@index([roleId])
   @@index([active])
@@ -259,6 +259,8 @@ model PriceListItem {
   normalPrice        Decimal?         @map("normal_price") @db.Decimal(15, 4)
   reference          String?          @db.VarChar(120)
   unitPrice          Decimal?         @map("unit_price") @db.Decimal(15, 4)
+  pisRate            Decimal          @default(0) @map("pis_rate") @db.Decimal(7, 4)
+  cofinsRate         Decimal          @default(0) @map("cofins_rate") @db.Decimal(7, 4)
   ipiRate            Decimal?         @map("ipi_rate") @db.Decimal(7, 4)
   ipiIncluded        Boolean?         @map("ipi_included")
   icmsRate           Decimal          @default(0) @map("icms_rate") @db.Decimal(7, 4)
@@ -582,7 +584,7 @@ model OrderNumberSequence {
 
 model OrderDraft {
   id         String   @id @db.Char(36)
-  userId     String   @unique @map("user_id") @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
   customerId String   @map("customer_id") @db.Char(36)
   payload    Json
   revision   Int      @default(1) @db.UnsignedInt
@@ -591,7 +593,9 @@ model OrderDraft {
   user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
+  @@unique([userId, customerId])
   @@index([customerId])
+  @@index([userId, updatedAt])
   @@index([updatedAt])
   @@map("order_drafts")
 }
@@ -718,8 +722,20 @@ model OrderApprovalItem {
   negotiatedSubtotal               Decimal                   @map("negotiated_subtotal") @db.Decimal(25, 4)
   exceptionUnitAmount              Decimal                   @map("exception_unit_amount") @db.Decimal(15, 4)
   exceptionTotalAmount             Decimal                   @map("exception_total_amount") @db.Decimal(25, 4)
+  pisSelected                       Boolean                   @default(false) @map("pis_selected")
+  pisRate                           Decimal?                  @map("pis_rate") @db.Decimal(7, 4)
+  pisUnitAmount                     Decimal?                  @map("pis_unit_amount") @db.Decimal(15, 4)
+  cofinsSelected                    Boolean                   @default(false) @map("cofins_selected")
+  cofinsRate                        Decimal?                  @map("cofins_rate") @db.Decimal(7, 4)
+  cofinsUnitAmount                  Decimal?                  @map("cofins_unit_amount") @db.Decimal(15, 4)
+  icmsSelected                      Boolean                   @default(false) @map("icms_selected")
   ipiRate                          Decimal?                  @map("ipi_rate") @db.Decimal(7, 4)
+  ipiSelected                      Boolean                   @default(false) @map("ipi_selected")
+  ipiUnitAmount                    Decimal?                  @map("ipi_unit_amount") @db.Decimal(15, 4)
   icmsRate                         Decimal?                  @map("icms_rate") @db.Decimal(7, 4)
+  icmsUnitAmount                   Decimal?                  @map("icms_unit_amount") @db.Decimal(15, 4)
+  totalTaxUnitAmount               Decimal                   @default(0) @map("total_tax_unit_amount") @db.Decimal(15, 4)
+  finalUnitPrice                   Decimal                   @map("final_unit_price") @db.Decimal(15, 4)
   createdAt                        DateTime                  @default(now()) @map("created_at") @db.DateTime(3)
   approvalRequest                  OrderPriceApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Restrict)
   sourceProduct                    Product?                  @relation(fields: [sourceProductId], references: [id], onDelete: Restrict)
@@ -762,8 +778,20 @@ model OrderItem {
   negotiatedUnitPrice              Decimal             @map("negotiated_unit_price") @db.Decimal(15, 4)
   minimumReferencePrice            Decimal?            @map("minimum_reference_price") @db.Decimal(15, 4)
   normalReferencePrice             Decimal?            @map("normal_reference_price") @db.Decimal(15, 4)
+  pisSelected                      Boolean             @default(false) @map("pis_selected")
+  pisRate                          Decimal?            @map("pis_rate") @db.Decimal(7, 4)
+  pisUnitAmount                    Decimal?            @map("pis_unit_amount") @db.Decimal(15, 4)
+  cofinsSelected                   Boolean             @default(false) @map("cofins_selected")
+  cofinsRate                       Decimal?            @map("cofins_rate") @db.Decimal(7, 4)
+  cofinsUnitAmount                 Decimal?            @map("cofins_unit_amount") @db.Decimal(15, 4)
+  icmsSelected                     Boolean             @default(false) @map("icms_selected")
   ipiRate                          Decimal?            @map("ipi_rate") @db.Decimal(7, 4)
+  ipiSelected                      Boolean             @default(false) @map("ipi_selected")
+  ipiUnitAmount                    Decimal?            @map("ipi_unit_amount") @db.Decimal(15, 4)
   icmsRate                         Decimal?            @map("icms_rate") @db.Decimal(7, 4)
+  icmsUnitAmount                   Decimal?            @map("icms_unit_amount") @db.Decimal(15, 4)
+  totalTaxUnitAmount               Decimal             @default(0) @map("total_tax_unit_amount") @db.Decimal(15, 4)
+  finalUnitPrice                   Decimal             @map("final_unit_price") @db.Decimal(15, 4)
   subtotal                         Decimal             @db.Decimal(25, 4)
   createdAt                        DateTime            @default(now()) @map("created_at") @db.DateTime(3)
   order                            Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)

@@ -263,8 +263,10 @@ describe('catálogo de pedidos com várias listas', () => {
       description: 'Produto',
       reference: 'REF',
       unitPrice: new Prisma.Decimal('15'),
+      pisRate: new Prisma.Decimal('1.65'),
+      cofinsRate: new Prisma.Decimal('7.6'),
       ipiRate: new Prisma.Decimal('3.25'),
-      ipiIncluded: true,
+      ipiIncluded: false,
       icmsRate: new Prisma.Decimal('17.5'),
       priceListVersionId: versionId,
       priceListVersion: {
@@ -314,15 +316,22 @@ describe('catálogo de pedidos com várias listas', () => {
           productCode: 'P-01',
           priceListVersionId: versionId,
           quantity: 2,
+          appliedTaxes: { pis: true, cofins: false, icms: false, ipi: true },
         },
       ],
     });
 
-    expect(result.data.total).toBe('30.0000');
+    expect(result.data.total).toBe('31.4700');
     expect(result.data.lines[0]).toMatchObject({
       kind: 'STANDALONE_PRODUCT',
       productCode: 'P-01',
       unitPrice: '15.0000',
+      finalUnitPrice: '15.7350',
+      taxes: {
+        pis: { selected: true, rate: '1.6500', unitAmount: '0.2475' },
+        ipi: { selected: true, rate: '3.2500', unitAmount: '0.4875' },
+        totalUnitAmount: '0.7350',
+      },
       priceList: { code: 'SEGMENTO_A' },
       priceListVersion: { id: versionId, version: 4 },
       icmsRate: '17.5000',
@@ -335,6 +344,25 @@ describe('catálogo de pedidos com várias listas', () => {
         }),
       }),
     );
+
+    product.ipiIncluded = true;
+    const legacyResult = await new OrdersService(prisma).quote({
+      customerId,
+      lines: [
+        {
+          kind: 'STANDALONE_PRODUCT',
+          productCode: 'P-01',
+          priceListVersionId: versionId,
+          quantity: 1,
+          appliedTaxes: { pis: false, cofins: false, icms: false, ipi: true },
+        },
+      ],
+    });
+    expect(legacyResult.data.lines[0]).toMatchObject({
+      finalUnitPrice: '15.4875',
+      ipiIncluded: false,
+      taxes: { ipi: { selected: true, unitAmount: '0.4875' } },
+    });
   });
 
   it('cota produto avulso pelo segmento sem exigir classe do cliente', async () => {
@@ -439,7 +467,18 @@ describe('catálogo de pedidos com várias listas', () => {
               kit: { code: 'K-01', currentImage },
               priceList: { id: 'list-1', code: 'KIT', name: 'Kits', type: 'KIT_COMPONENT' },
             },
-            priceListVersion: { id: 'version-1', version: 7 },
+            priceListVersion: {
+              id: 'version-1',
+              version: 7,
+              items: [
+                {
+                  pisRate: new Prisma.Decimal('1'),
+                  cofinsRate: new Prisma.Decimal('2'),
+                  icmsRate: new Prisma.Decimal('3'),
+                  ipiRate: new Prisma.Decimal('4'),
+                },
+              ],
+            },
           },
         ]),
       },
@@ -454,6 +493,15 @@ describe('catálogo de pedidos com várias listas', () => {
       kind: 'KIT',
       code: 'K-01',
       unitPrice: '120.0000',
+      finalUnitPrice: '132.0000',
+      subtotal: '132.0000',
+      taxes: {
+        pis: { selected: true, rate: '1.0000', unitAmount: '1.2000' },
+        cofins: { selected: true, rate: '2.0000', unitAmount: '2.4000' },
+        icms: { selected: true, rate: '3.0000', unitAmount: '3.6000' },
+        ipi: { selected: true, rate: '4.0000', unitAmount: '4.8000' },
+        totalUnitAmount: '12.0000',
+      },
       image: { id: currentImage.id },
     });
     expect(prisma.calculationVersion.findMany).toHaveBeenCalledTimes(1);

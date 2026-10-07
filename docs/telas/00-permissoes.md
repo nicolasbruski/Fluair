@@ -14,14 +14,15 @@ O sistema poderá oferecer papéis como modelos de acesso, mas a autorização s
 
 Modelo com todas as permissões. Deve ser atribuído a poucas pessoas.
 
-### Operador de cálculo
+### Vendedor
 
-Modelo para quem consulta resultados existentes, visualiza históricos e exporta arquivos. A criação de
-novos cálculos passou a ser exclusiva do modelo Administrador.
+Modelo comercial para quem consulta resultados e clientes, visualiza o catálogo, negocia preços e
+monta pedidos. A criação de novos cálculos permanece exclusiva do modelo Administrador.
 
 ### Consulta
 
-Modelo futuro para quem pode apenas buscar, abrir detalhes e exportar resultados já existentes.
+Modelo para quem consulta resultados existentes e também pode executar o fluxo comercial de
+Pedidos. Não recebe ações administrativas.
 
 Os nomes e a composição final dos papéis ainda devem ser confirmados. A implementação não deve espalhar comparações como `role === "ADMIN"` em cada tela; deve consultar capacidades.
 
@@ -49,7 +50,7 @@ Os nomes e a composição final dos papéis ainda devem ser confirmados. A imple
 
 ## Matriz preliminar
 
-| Tela ou ação | Administrador | Operador de cálculo | Consulta |
+| Tela ou ação | Administrador | Vendedor | Consulta |
 |---|---:|---:|---:|
 | Login | Sim | Sim | Sim |
 | Busca | Sim | Sim | Sim |
@@ -61,8 +62,10 @@ Os nomes e a composição final dos papéis ainda devem ser confirmados. A imple
 | Administrar/importar listas | Sim | Não | Não |
 | Recalcular em massa | Sim | Não | Não |
 | Gerenciar usuários | Sim | Não | Não |
-| Pedidos | Sim | Por concessão | Por concessão |
-| Clientes | Sim | Por concessão | Por concessão |
+| Pedidos | Sim | Sim | Sim |
+| Produtos | Sim | Sim | Sim, somente consulta |
+| Clientes | Sim | Sim, somente consulta | Sim, somente consulta |
+| Decidir aprovação de preço | Sim | Não | Não |
 | Comissões | Individual | Individual | Individual |
 
 `Opcional` significa que a capacidade poderá ser concedida individualmente sem transformar o usuário em administrador.
@@ -109,13 +112,20 @@ A fundação técnica de autenticação e autorização foi implementada com pap
 modelos e permissões efetivas calculadas a cada chamada. O seed estrutural inicial adota:
 
 - **Administrador:** todas as permissões gerais documentadas; Comissões permanece individual;
-- **Operador de cálculo:** `calculation.view`, `calculation.history` e `calculation.export`;
-- **Consulta:** `calculation.view` e `calculation.history`.
+- **Vendedor:** `calculation.view`, `calculation.history`, `calculation.export`, `order.access`,
+  `price.view`, `price.override` e `customer.view`;
+- **Consulta:** `calculation.view`, `calculation.history`, `order.access`, `price.view`,
+  `price.override` e `customer.view`.
 
 Como a exportação para Consulta está marcada como opcional na matriz preliminar, ela não é
 concedida automaticamente. Pode ser concedida por override individual quando a regra for
 aprovada. A composição dos modelos pode evoluir pelo seed/migração sem introduzir verificações de
 papel nas telas.
+
+Todos os modelos autenticados recebem o conjunto necessário para montar pedidos, negociar preços e
+solicitar exceções abaixo do mínimo. Aprovar ou reprovar uma exceção é uma regra administrativa
+estrita: além da capacidade de gestão, o backend exige o papel `ADMINISTRATOR`, e a autoaprovação
+continua proibida.
 
 As tabelas `roles`, `permissions`, `role_permissions` e `user_permission_overrides` armazenam essa
 estrutura. O endpoint de sessão retorna apenas as permissões efetivas; negações individuais

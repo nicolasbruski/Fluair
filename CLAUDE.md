@@ -92,10 +92,10 @@ mostra o último valor por cliente no carrinho, Clientes mostra o último valor 
 versão vinculada e o histórico do kit mostra a última venda global de cada versão. Somente pedidos
 `SUBMITTED` participam; o dado é informativo e não substitui a referência ou o preço atual.
 
-Cada usuário possui ainda um único pedido anterior não finalizado persistido. Trocar de cliente
-salva o carrinho atual nesse slot, substituindo o anterior; voltar ao cliente salvo troca os dois
-carrinhos atomicamente. Carrinho vazio não substitui o slot e a confirmação remove o rascunho
-somente quando usuário e cliente coincidem.
+Cada usuário possui uma fila persistente de até cinco pedidos não finalizados, um por cliente.
+Trocar de cliente salva o carrinho atual e restaura o destino atomicamente. Ao entrar o sexto,
+o menos recente é removido. A confirmação remove somente o rascunho em que usuário e cliente
+coincidem.
 
 ## 5. Decisões de escopo já confirmadas
 
@@ -125,7 +125,7 @@ somente quando usuário e cliente coincidem.
 ### 5.3 Listas de preço
 
 - Listas `KIT_COMPONENT` autorizam classes e oferecem preço mínimo e normal.
-- Listas `STANDALONE_PRODUCT` autorizam segmentos e oferecem preço unitário com IPI já incluído.
+- Listas `STANDALONE_PRODUCT` autorizam segmentos e oferecem preço-base com alíquotas versionadas de PIS, Cofins, ICMS e IPI.
 - Códigos, públicos, faixas e versões vêm do banco; não criar enums por lista no código.
 - Perfis e matrizes antigas permanecem apenas para histórico, rollback e escrita dupla temporária.
 

@@ -29,12 +29,12 @@ const customerId = '10000000-0000-4000-8000-000000000001';
 const versionId = '20000000-0000-4000-8000-000000000001';
 const approvalId = '30000000-0000-4000-8000-000000000001';
 
-function setup(permissions: string[]) {
+function setup(permissions: string[], roleCode = 'CALCULATION_OPERATOR') {
   const user: AccessUserRecord = {
     id: userId,
     name: 'Solicitante',
     email: 'solicitante@fluair.test',
-    roleCode: 'CALCULATION_OPERATOR',
+    roleCode,
     passwordHash: 'hash:senha-correta',
     active: true,
     rolePermissions: permissions,
@@ -102,6 +102,24 @@ describe('API do ciclo do solicitante de aprovacao de preco', () => {
     expect(context.approvals.create).not.toHaveBeenCalled();
     expect(context.approvals.mine).toHaveBeenCalledWith(
       { page: 1, pageSize: 20 },
+      expect.objectContaining({ id: userId }),
+      expect.any(String),
+    );
+  });
+
+  it('valida e encaminha o recorte temporal do sino pessoal', async () => {
+    const context = setup(['order.access', 'price.view']);
+    const agent = await agentFor(context);
+    await agent
+      .get('/api/v1/order-price-approvals/mine')
+      .query({ requestedFrom: '2026-09-28T12:00:00.000Z', page: 1, pageSize: 3 })
+      .expect(200);
+    expect(context.approvals.mine).toHaveBeenCalledWith(
+      {
+        requestedFrom: new Date('2026-09-28T12:00:00.000Z'),
+        page: 1,
+        pageSize: 3,
+      },
       expect.objectContaining({ id: userId }),
       expect.any(String),
     );
@@ -181,7 +199,7 @@ describe('API do ciclo do solicitante de aprovacao de preco', () => {
     );
   });
 
-  it('protege toda a API administrativa com a permissao dedicada', async () => {
+  it('protege toda a API administrativa pelo papel Administrador', async () => {
     const context = setup(['order.access', 'price.view']);
     const agent = await agentFor(context);
     await agent.get('/api/v1/order-price-approvals/admin/count').expect(403);
@@ -200,8 +218,19 @@ describe('API do ciclo do solicitante de aprovacao de preco', () => {
     expect(context.approvals.adminCount).not.toHaveBeenCalled();
   });
 
-  it('valida filtros e decisoes e encaminha o ator administrativo', async () => {
+  it('nao permite decisao a usuario comum mesmo com a permissao administrativa', async () => {
     const context = setup(['order.price-approval.manage']);
+    const agent = await agentFor(context);
+    await agent
+      .post(`/api/v1/order-price-approvals/admin/${approvalId}/approve`)
+      .set('Origin', config.APP_URL)
+      .send({ expectedVersion: 1 })
+      .expect(403);
+    expect(context.approvals.approve).not.toHaveBeenCalled();
+  });
+
+  it('valida filtros e decisoes e encaminha o ator administrativo', async () => {
+    const context = setup(['order.price-approval.manage'], 'ADMINISTRATOR');
     const agent = await agentFor(context);
     await agent
       .get('/api/v1/order-price-approvals/admin/count')
@@ -240,7 +269,7 @@ describe('API do ciclo do solicitante de aprovacao de preco', () => {
   });
 
   it('rejeita motivo ausente e intervalo administrativo invertido', async () => {
-    const context = setup(['order.price-approval.manage']);
+    const context = setup(['order.price-approval.manage'], 'ADMINISTRATOR');
     const agent = await agentFor(context);
     await agent
       .post(`/api/v1/order-price-approvals/admin/${approvalId}/reject`)

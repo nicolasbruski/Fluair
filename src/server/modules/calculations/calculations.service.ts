@@ -278,7 +278,17 @@ export class CalculationsService {
             priceList: true,
           },
         },
-        priceListVersion: { select: { id: true, version: true } },
+        priceListVersion: {
+          select: {
+            id: true,
+            version: true,
+            items: {
+              orderBy: { sourceRow: 'asc' },
+              take: 1,
+              select: { pisRate: true, cofinsRate: true, icmsRate: true, ipiRate: true },
+            },
+          },
+        },
         createdBy: { select: { name: true } },
         customers: {
           include: { linkedBy: { select: { name: true } } },
@@ -303,11 +313,18 @@ export class CalculationsService {
             code: calculation.series.priceList.code,
             name: calculation.series.priceList.name,
           },
-          priceListVersion: calculation.priceListVersion,
+          priceListVersion: {
+            id: calculation.priceListVersion.id,
+            version: calculation.priceListVersion.version,
+          },
           sourceFileName: calculation.sourceFileName,
           sourceFileHash: calculation.sourceFileHash,
           minimumTotal: calculation.minimumTotal.toFixed(4),
           normalTotal: calculation.normalTotal.toFixed(4),
+          pisRate: calculation.priceListVersion.items?.[0]?.pisRate.toFixed(4) ?? '0.0000',
+          cofinsRate: calculation.priceListVersion.items?.[0]?.cofinsRate.toFixed(4) ?? '0.0000',
+          icmsRate: calculation.priceListVersion.items?.[0]?.icmsRate.toFixed(4) ?? '0.0000',
+          ipiRate: calculation.priceListVersion.items?.[0]?.ipiRate?.toFixed(4) ?? '0.0000',
           itemCount: calculation.itemCount,
           missingPriceCount: calculation.missingPriceCount,
           origin: calculation.origin,

@@ -58,16 +58,17 @@ export const createOrderPriceApprovalSchema = z
     });
   });
 
-export const myOrderPriceApprovalsQuerySchema = z.object({
-  status: z.enum(ORDER_PRICE_APPROVAL_STATUSES).optional(),
-  page: z.coerce.number().int().min(1).optional().default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).optional().default(20),
-});
-
 const dateTimeQuerySchema = z
   .string()
   .datetime({ offset: true })
   .transform((value) => new Date(value));
+
+export const myOrderPriceApprovalsQuerySchema = z.object({
+  status: z.enum(ORDER_PRICE_APPROVAL_STATUSES).optional(),
+  requestedFrom: dateTimeQuerySchema.optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
 
 export const adminOrderPriceApprovalsQuerySchema = z
   .object({

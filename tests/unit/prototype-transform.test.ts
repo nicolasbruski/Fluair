@@ -66,9 +66,16 @@ describe('transformPrototype', () => {
     expect(transformed).toContain('id="pedidoClienteOptions" role="listbox"');
     expect(transformed).toContain('id="order-price-lists"');
     expect(transformed).toContain('id="order-drawer-list"');
-    expect(transformed).toContain('id="order-approvals-list"');
-    expect(transformed).toContain('id="order-approvals-reload"');
-    expect(transformed).toContain('Minhas solicitações');
+    expect(transformed).not.toContain('class="order-draft-history-title"');
+    expect(transformed).not.toContain('id="order-draft-count"');
+    expect(transformed.indexOf('id="order-draft-tabs"')).toBeLessThan(
+      transformed.indexOf('id="pedido-client-trigger"'),
+    );
+    expect(transformed.indexOf('id="order-draft-tabs"')).toBeLessThan(
+      transformed.indexOf('class="card order-step"'),
+    );
+    expect(transformed).not.toContain('id="order-approvals-list"');
+    expect(transformed).not.toContain('id="order-approvals-reload"');
     expect(transformed).toContain('.order-cart-row.has-exception');
     expect(transformed).toContain(
       '.order-drawer-list{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 18px 24px;',
@@ -115,6 +122,10 @@ describe('transformPrototype', () => {
     expect(transformed).toContain('href="/aprovacoes/precos"');
     expect(transformed).toContain('data-permissions="order.price-approval.manage"');
     expect(transformed).toContain('id="admin-approvals-badge"');
+    expect(transformed).toContain('id="admin-approvals-notification-button"');
+    expect(transformed).toContain('id="admin-approvals-notification-panel"');
+    expect(transformed).toContain('id="admin-approvals-notification-subtitle"');
+    expect(transformed).not.toContain('>Aprovações <span');
     expect(transformed).toContain('id="admin-approvals-filters"');
     expect(transformed).toContain('id="admin-approval-detail-modal"');
     expect(transformed).toContain('id="admin-approval-decision-modal"');

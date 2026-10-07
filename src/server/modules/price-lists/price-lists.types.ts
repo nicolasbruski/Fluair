@@ -51,6 +51,8 @@ export interface PriceListStructureItemRecord {
   normalPrice: { toString(): string } | null;
   reference: string | null;
   unitPrice: { toString(): string } | null;
+  pisRate: { toString(): string };
+  cofinsRate: { toString(): string };
   ipiRate: { toString(): string } | null;
   ipiIncluded: boolean | null;
   icmsRate: { toString(): string };

@@ -19,6 +19,8 @@ import type {
   OrderDraftEnvelope,
   OrderDraftSwapEnvelope,
   OrderLastSalePricesEnvelope,
+  OrderAppliedTaxes,
+  OrderTaxBreakdown,
 } from '../../../shared/orders.js';
 import type { AuthenticatedUser } from '../../../shared/auth.js';
 import { ROLE_CODES } from '../../../shared/auth.js';
@@ -79,6 +81,47 @@ export interface OrdersServiceOptions {
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const priceListVersionWithTaxesSelect = {
+  id: true,
+  version: true,
+  items: {
+    orderBy: { sourceRow: 'asc' as const },
+    take: 1,
+    select: { pisRate: true, cofinsRate: true, icmsRate: true, ipiRate: true },
+  },
+} satisfies Prisma.PriceListVersionSelect;
+
+function versionTaxes(version: {
+  items?: Array<{
+    pisRate: Prisma.Decimal;
+    cofinsRate: Prisma.Decimal;
+    icmsRate: Prisma.Decimal;
+    ipiRate: Prisma.Decimal | null;
+  }>;
+}): Record<keyof OrderAppliedTaxes, Prisma.Decimal> {
+  const item = version.items?.[0];
+  return {
+    pis: item?.pisRate ?? new Prisma.Decimal(0),
+    cofins: item?.cofinsRate ?? new Prisma.Decimal(0),
+    icms: item?.icmsRate ?? new Prisma.Decimal(0),
+    ipi: item?.ipiRate ?? new Prisma.Decimal(0),
+  };
+}
+
+function versionTaxStrings(version: Parameters<typeof versionTaxes>[0]) {
+  const rates = versionTaxes(version);
+  return {
+    pisRate: rates.pis.toFixed(4),
+    cofinsRate: rates.cofins.toFixed(4),
+    icmsRate: rates.icms.toFixed(4),
+    ipiRate: rates.ipi.toFixed(4),
+  };
+}
+
+function versionSummary(version: { id: string; version: number }) {
+  return { id: version.id, version: version.version };
+}
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -120,6 +163,38 @@ function stableJson(value: unknown): string {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function orderTaxBreakdown(
+  baseUnitPrice: Prisma.Decimal,
+  applied: OrderAppliedTaxes,
+  rates: Record<keyof OrderAppliedTaxes, Prisma.Decimal>,
+): { taxes: OrderTaxBreakdown; total: Prisma.Decimal; finalUnitPrice: Prisma.Decimal } {
+  const tax = (code: keyof OrderAppliedTaxes) => {
+    const unitAmount = applied[code]
+      ? baseUnitPrice.mul(rates[code]).div(100).toDecimalPlaces(4)
+      : new Prisma.Decimal(0);
+    return {
+      selected: applied[code],
+      rate: rates[code].toFixed(4),
+      unitAmount: unitAmount.toFixed(4),
+    };
+  };
+  const taxes = {
+    pis: tax('pis'),
+    cofins: tax('cofins'),
+    icms: tax('icms'),
+    ipi: tax('ipi'),
+  };
+  const total = Object.values(taxes).reduce(
+    (sum, item) => sum.add(item.unitAmount),
+    new Prisma.Decimal(0),
+  );
+  return {
+    taxes: { ...taxes, totalUnitAmount: total.toFixed(4) },
+    total,
+    finalUnitPrice: baseUnitPrice.add(total),
+  };
 }
 
 type QuoteTokenPayload = {
@@ -170,8 +245,8 @@ export class OrdersService {
   }
 
   async draft(actor: AuthenticatedUser): Promise<OrderDraftEnvelope> {
-    const draft = await this.draftRepository.findForUser(actor.id);
-    return { data: { draft: draft ? this.orderDraft(draft) : null } };
+    const drafts = await this.draftRepository.findForUser(actor.id);
+    return { data: { drafts: drafts.map((draft) => this.orderDraft(draft)) } };
   }
 
   async swapDraft(
@@ -184,7 +259,8 @@ export class OrdersService {
     return {
       data: {
         restored: result.restored ? this.orderDraft(result.restored) : null,
-        draft: result.draft ? this.orderDraft(result.draft) : null,
+        drafts: result.drafts.map((draft) => this.orderDraft(draft)),
+        evicted: result.evicted ? this.orderDraft(result.evicted) : null,
       },
     };
   }
@@ -194,8 +270,14 @@ export class OrdersService {
     actor: AuthenticatedUser,
   ): Promise<OrderDraftEnvelope> {
     await this.customer(command.customerId);
-    const draft = await this.draftRepository.save(actor.id, command);
-    return { data: { draft: this.orderDraft(draft) } };
+    const result = await this.draftRepository.save(actor.id, command);
+    return {
+      data: {
+        draft: this.orderDraft(result.draft),
+        drafts: result.drafts.map((draft) => this.orderDraft(draft)),
+        evicted: result.evicted ? this.orderDraft(result.evicted) : null,
+      },
+    };
   }
 
   async deleteDraft(customerId: string | undefined, actor: AuthenticatedUser): Promise<void> {
@@ -310,6 +392,8 @@ export class OrdersService {
           quantity: line.quantity,
           referenceUnitPrice: line.referenceUnitPrice,
           negotiatedUnitPrice: line.negotiatedUnitPrice,
+          finalUnitPrice: line.finalUnitPrice,
+          taxes: line.taxes,
         })),
         total: data.total,
         recipients: data.recipients,
@@ -508,7 +592,7 @@ export class OrdersService {
               priceList: { select: { id: true, code: true, name: true, type: true } },
             },
           },
-          priceListVersion: { select: { id: true, version: true } },
+          priceListVersion: { select: priceListVersionWithTaxesSelect },
         },
       }),
       this.prisma.calculationItem.findMany({
@@ -584,10 +668,11 @@ export class OrdersService {
           description: kit.catalogDescription ?? kit.kitDescription,
           minimumPrice: (kit.catalogMinimumPrice ?? kit.minimumTotal).toString(),
           normalPrice: (kit.catalogNormalPrice ?? kit.normalTotal).toString(),
+          ...versionTaxStrings(kit.priceListVersion),
           scope: kit.catalogScope,
           calculatedAt: kit.createdAt.toISOString(),
           priceList: kit.series.priceList,
-          priceListVersion: kit.priceListVersion,
+          priceListVersion: versionSummary(kit.priceListVersion),
           image: kit.series.kit.currentImage ? imageReference(kit.series.kit.currentImage) : null,
         })),
       },
@@ -845,6 +930,8 @@ export class OrdersService {
           description: true,
           reference: true,
           unitPrice: true,
+          pisRate: true,
+          cofinsRate: true,
           ipiRate: true,
           ipiIncluded: true,
           icmsRate: true,
@@ -882,13 +969,11 @@ export class OrdersService {
               priceList: { select: { id: true, code: true, name: true, type: true } },
             },
           },
-          priceListVersion: { select: { id: true, version: true } },
+          priceListVersion: { select: priceListVersionWithTaxesSelect },
         },
       }),
     ]);
-    const validProducts = products.filter(
-      (item) => item.unitPrice && item.ipiRate && item.ipiIncluded === true,
-    );
+    const validProducts = products.filter((item) => item.unitPrice && item.ipiRate);
     type ValidProduct = (typeof validProducts)[number];
     const productsByCode = new Map<string, ValidProduct[]>();
     for (const item of validProducts) {
@@ -950,12 +1035,16 @@ export class OrdersService {
                 maximumOrderQuantity: offerList.maximumOrderQuantity,
                 minimumPrice: minimum.unitPrice!.toString(),
                 maximumPrice: offer.unitPrice!.toString(),
+                pisRate: offer.pisRate?.toString() ?? '0',
+                cofinsRate: offer.cofinsRate?.toString() ?? '0',
                 ipiRate: offer.ipiRate!.toString(),
                 icmsRate: offer.icmsRate.toString(),
               };
             }),
+            pisRate: item.pisRate?.toString() ?? '0',
+            cofinsRate: item.cofinsRate?.toString() ?? '0',
             ipiRate: item.ipiRate!.toString(),
-            ipiIncluded: true as const,
+            ipiIncluded: item.ipiIncluded ?? false,
             icmsRate: item.icmsRate.toString(),
             priceListVersionId: item.priceListVersionId,
             priceListVersion: item.priceListVersion.version,
@@ -973,10 +1062,11 @@ export class OrdersService {
           description: kit.catalogDescription ?? kit.kitDescription,
           minimumPrice: (kit.catalogMinimumPrice ?? kit.minimumTotal).toString(),
           normalPrice: (kit.catalogNormalPrice ?? kit.normalTotal).toString(),
+          ...versionTaxStrings(kit.priceListVersion),
           scope: kit.catalogScope,
           calculatedAt: kit.createdAt.toISOString(),
           priceList: kit.series.priceList,
-          priceListVersion: kit.priceListVersion,
+          priceListVersion: versionSummary(kit.priceListVersion),
           image: kit.series.kit.currentImage ? imageReference(kit.series.kit.currentImage) : null,
         })),
       },
@@ -1144,7 +1234,7 @@ export class OrdersService {
               priceList: { select: { id: true, code: true, name: true, type: true } },
             },
           },
-          priceListVersion: { select: { id: true, version: true } },
+          priceListVersion: { select: priceListVersionWithTaxesSelect },
         },
       }),
       this.prisma.calculationItem.findMany({
@@ -1310,6 +1400,8 @@ export class OrdersService {
           description: true,
           reference: true,
           unitPrice: true,
+          pisRate: true,
+          cofinsRate: true,
           ipiRate: true,
           ipiIncluded: true,
           icmsRate: true,
@@ -1375,7 +1467,7 @@ export class OrdersService {
               priceList: { select: { id: true, code: true, name: true, type: true } },
             },
           },
-          priceListVersion: { select: { id: true, version: true } },
+          priceListVersion: { select: priceListVersionWithTaxesSelect },
         },
       }),
       this.prisma.product.findMany({
@@ -1398,7 +1490,7 @@ export class OrdersService {
     const unavailable: string[] = [];
     for (const line of productLines) {
       const product = productByKey.get(`${line.priceListVersionId}:${line.productCode}`);
-      if (!product?.unitPrice || !product.ipiRate || product.ipiIncluded !== true) {
+      if (!product?.unitPrice || !product.ipiRate) {
         unavailable.push(`Produto ${line.productCode} ausente ou incompatível com o cliente.`);
         continue;
       }
@@ -1447,13 +1539,23 @@ export class OrdersService {
             `Você não possui permissão para alterar o preço do produto ${product.productCode}.`,
           );
         }
-        const subtotal = negotiatedUnitPrice.mul(line.quantity);
+        const rates = {
+          pis: product.pisRate ?? new Prisma.Decimal(0),
+          cofins: product.cofinsRate ?? new Prisma.Decimal(0),
+          icms: product.icmsRate,
+          ipi: product.ipiRate!,
+        };
+        const appliedTaxes = line.appliedTaxes ?? {
+          pis: true,
+          cofins: true,
+          icms: true,
+          ipi: true,
+        };
+        const calculated = orderTaxBreakdown(negotiatedUnitPrice, appliedTaxes, rates);
+        const referenceCalculated = orderTaxBreakdown(referenceUnitPrice, appliedTaxes, rates);
+        const subtotal = calculated.finalUnitPrice.mul(line.quantity);
         total = total.add(subtotal);
-        referenceTotal = referenceTotal.add(referenceUnitPrice.mul(line.quantity));
-        if (!product.ipiRate!.isZero())
-          warnings.add(
-            'O IPI dos produtos avulsos já está incluído no preço e não foi somado novamente.',
-          );
+        referenceTotal = referenceTotal.add(referenceCalculated.finalUnitPrice.mul(line.quantity));
         const list = product.priceListVersion.priceList;
         return {
           kind: 'STANDALONE_PRODUCT',
@@ -1475,9 +1577,13 @@ export class OrdersService {
           negotiatedUnitPrice: negotiatedUnitPrice.toFixed(4),
           minimumReferencePrice: referenceUnitPrice.toFixed(4),
           normalReferencePrice: referenceUnitPrice.toFixed(4),
+          finalUnitPrice: calculated.finalUnitPrice.toFixed(4),
+          taxes: calculated.taxes,
           subtotal: subtotal.toFixed(4),
+          pisRate: product.pisRate?.toFixed(4) ?? '0.0000',
+          cofinsRate: product.cofinsRate?.toFixed(4) ?? '0.0000',
           ipiRate: product.ipiRate!.toFixed(4),
-          ipiIncluded: true,
+          ipiIncluded: false,
           icmsRate: product.icmsRate.toFixed(4),
           priceListVersion: {
             id: product.priceListVersion.id,
@@ -1510,9 +1616,18 @@ export class OrdersService {
           `Você não possui permissão para alterar o preço do kit ${kit.series.kit.code}.`,
         );
       }
-      const subtotal = negotiatedUnitPrice.mul(line.quantity);
+      const rates = versionTaxes(kit.priceListVersion);
+      const appliedTaxes = line.appliedTaxes ?? {
+        pis: true,
+        cofins: true,
+        icms: true,
+        ipi: true,
+      };
+      const calculated = orderTaxBreakdown(negotiatedUnitPrice, appliedTaxes, rates);
+      const referenceCalculated = orderTaxBreakdown(referenceUnitPrice, appliedTaxes, rates);
+      const subtotal = calculated.finalUnitPrice.mul(line.quantity);
       total = total.add(subtotal);
-      referenceTotal = referenceTotal.add(referenceUnitPrice.mul(line.quantity));
+      referenceTotal = referenceTotal.add(referenceCalculated.finalUnitPrice.mul(line.quantity));
       return {
         kind: 'KIT',
         kitId: kit.series.kit.id ?? '',
@@ -1527,6 +1642,12 @@ export class OrdersService {
         negotiatedUnitPrice: negotiatedUnitPrice.toFixed(4),
         minimumReferencePrice: minimumReferencePrice.toFixed(4),
         normalReferencePrice: normalReferencePrice.toFixed(4),
+        finalUnitPrice: calculated.finalUnitPrice.toFixed(4),
+        taxes: calculated.taxes,
+        pisRate: rates.pis.toFixed(4),
+        cofinsRate: rates.cofins.toFixed(4),
+        icmsRate: rates.icms.toFixed(4),
+        ipiRate: rates.ipi.toFixed(4),
         subtotal: subtotal.toFixed(4),
         priceList: {
           ...kit.series.priceList,
@@ -1534,7 +1655,7 @@ export class OrdersService {
           minimumOrderQuantity: null,
           maximumOrderQuantity: null,
         },
-        priceListVersion: kit.priceListVersion,
+        priceListVersion: versionSummary(kit.priceListVersion),
         image: kit.series.kit.currentImage ? imageReference(kit.series.kit.currentImage) : null,
       };
     });
@@ -2071,10 +2192,14 @@ export class OrdersService {
         quantity: String(line.quantity),
         referenceUnitPrice: line.referenceUnitPrice,
         negotiatedUnitPrice: line.negotiatedUnitPrice,
+        finalUnitPrice: line.finalUnitPrice,
+        taxes: line.taxes,
         minimumReferencePrice: line.minimumReferencePrice,
         normalReferencePrice: line.normalReferencePrice,
-        ipiRate: line.kind === 'STANDALONE_PRODUCT' ? line.ipiRate : null,
-        icmsRate: line.kind === 'STANDALONE_PRODUCT' ? line.icmsRate : null,
+        pisRate: line.pisRate,
+        cofinsRate: line.cofinsRate,
+        ipiRate: line.ipiRate,
+        icmsRate: line.icmsRate,
         subtotal: line.subtotal,
       })),
       delivery: {

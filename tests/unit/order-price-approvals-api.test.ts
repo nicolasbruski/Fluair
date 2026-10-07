@@ -61,6 +61,26 @@ describe('API web de aprovações de preço', () => {
     );
   });
 
+  it('envia o recorte de sete dias usado pelo sino pessoal', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: [], pagination: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await listMyOrderPriceApprovals({
+      requestedFrom: '2026-09-28T12:00:00.000Z',
+      page: 1,
+      pageSize: 3,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/v1/order-price-approvals/mine?page=1&pageSize=3&requestedFrom=2026-09-28T12%3A00%3A00.000Z',
+    );
+  });
+
   it('monta filtros e decisões da fila administrativa', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [], pagination: {} }), {

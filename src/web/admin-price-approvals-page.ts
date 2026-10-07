@@ -1,20 +1,27 @@
-import type { AuthenticatedUser } from '../shared/auth.js';
+import { ROLE_CODES, type AuthenticatedUser } from '../shared/auth.js';
 import type {
   AdminOrderPriceApprovalDetail,
   AdminOrderPriceApprovalSummary,
+  MyOrderPriceApprovalSummary,
   OrderPriceApprovalStatusCode,
 } from '../shared/order-price-approvals.js';
 import { ApiError } from './services/api.js';
 import {
   approveAdminOrderPriceApproval,
+  cancelMyOrderPriceApproval,
   countAdminOrderPriceApprovals,
   getAdminOrderPriceApproval,
+  getMyOrderPriceApproval,
   listAdminOrderPriceApprovals,
+  listMyOrderPriceApprovals,
   rejectAdminOrderPriceApproval,
   type AdminOrderPriceApprovalsQuery,
 } from './services/order-price-approvals-api.js';
 
 const PAGE_SIZE = 20;
+const NOTIFICATION_PAGE_SIZE = 8;
+const PERSONAL_NOTIFICATION_PAGE_SIZE = 3;
+const PERSONAL_NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const POLL_INTERVAL_MS = 30_000;
 const statusLabels: Record<OrderPriceApprovalStatusCode, string> = {
   PENDING: 'Pendente',
@@ -33,8 +40,10 @@ let selected: AdminOrderPriceApprovalDetail | null = null;
 let decision: 'APPROVE' | 'REJECT' | null = null;
 let initialized = false;
 let listRequest = 0;
+let notificationListRequest = 0;
 let pollTimer: number | null = null;
 let badgeEnabled = false;
+let notificationPanelOpen = false;
 const modalReturnFocus = new Map<string, HTMLElement>();
 
 function element<T extends Element>(selector: string): T {
@@ -96,6 +105,14 @@ function statusTag(status: OrderPriceApprovalStatusCode): HTMLSpanElement {
   const tag = node('span', `approval-status approval-status--${status.toLowerCase()}`);
   tag.textContent = statusLabels[status];
   return tag;
+}
+
+function isAdministrator(): boolean {
+  return currentUser?.roleCode === ROLE_CODES.administrator;
+}
+
+function personalNotificationStart(): string {
+  return new Date(Date.now() - PERSONAL_NOTIFICATION_RETENTION_MS).toISOString();
 }
 
 function setFeedback(message: string, error = false): void {
@@ -161,24 +178,15 @@ function renderDetail(detail: AdminOrderPriceApprovalDetail): void {
   const header = node('div', 'approval-detail-summary');
   const title = node('div');
   title.append(
+    node('span', 'approval-detail-eyebrow', 'Cliente'),
     node('strong', undefined, `${detail.customer.code} · ${detail.customer.legalName}`),
     node(
       'small',
       undefined,
-      `Solicitada por ${detail.requester.name} em ${dateTime(detail.requestedAt)}`,
+      `Solicitação de ${detail.requester.name} · ${dateTime(detail.requestedAt)} · ${detail.itemCount} ${detail.itemCount === 1 ? 'item' : 'itens'} · ${detail.exceptionCount} abaixo do mínimo`,
     ),
   );
   header.append(title, statusTag(detail.status));
-
-  const facts = node('dl', 'approval-detail-facts');
-  facts.append(
-    detailField('E-mail do solicitante', detail.requester.email),
-    detailField('Itens / exceções', `${detail.itemCount} / ${detail.exceptionCount}`),
-    detailField('Total mínimo', money(detail.minimumTotalAmount)),
-    detailField('Total solicitado', money(detail.requestedTotalAmount)),
-    detailField('Impacto', money(detail.exceptionAmount)),
-    detailField('Válida até', dateTime(detail.decision?.approvedUntil ?? null)),
-  );
 
   const justification = node('section', 'approval-detail-section');
   justification.append(
@@ -187,14 +195,14 @@ function renderDetail(detail: AdminOrderPriceApprovalDetail): void {
   );
 
   const itemsSection = node('section', 'approval-detail-section');
-  itemsSection.append(node('h3', undefined, 'Carrinho analisado'));
+  itemsSection.append(node('h3', undefined, 'Itens da solicitação'));
   const items = node('div', 'approval-detail-items');
   for (const item of detail.items) {
     const card = node('article', `approval-item${item.requiresApproval ? ' is-exception' : ''}`);
     const itemHeader = node('div', 'approval-item-header');
     const copy = node('div');
     copy.append(
-      node('strong', undefined, `${item.lineNumber}. ${item.code} · ${item.description}`),
+      node('strong', undefined, `${item.code} · ${item.description}`),
       node(
         'small',
         undefined,
@@ -205,23 +213,33 @@ function renderDetail(detail: AdminOrderPriceApprovalDetail): void {
     if (item.requiresApproval)
       itemHeader.append(node('span', 'approval-exception-mark', 'Abaixo do mínimo'));
     const range = `${item.priceList.minimumOrderQuantity ?? 'sem mínimo'} a ${item.priceList.maximumOrderQuantity ?? 'sem máximo'}`;
+    const context = node('div', 'approval-item-context');
+    const appliedTaxes = item.taxes
+      ? (['pis', 'cofins', 'icms', 'ipi'] as const)
+          .filter((code) => item.taxes![code].selected)
+          .map((code) => `${code.toUpperCase()} ${item.taxes![code].rate}%`)
+          .join(' · ')
+      : '';
+    context.append(
+      node('span', undefined, `Quantidade: ${quantity(item.quantity)}`),
+      node('span', undefined, `Faixa: ${range}`),
+      ...(appliedTaxes ? [node('span', undefined, `Impostos: ${appliedTaxes}`)] : []),
+    );
     const data = node('dl', 'approval-item-data');
     data.append(
-      detailField('Quantidade', quantity(item.quantity)),
-      detailField('Faixa', range),
       detailField('Mínimo unitário', money(item.minimumUnitPrice)),
       detailField('Solicitado unitário', money(item.negotiatedUnitPrice)),
-      detailField('Subtotal mínimo', money(item.minimumSubtotal)),
-      detailField('Subtotal solicitado', money(item.negotiatedSubtotal)),
-      detailField('Diferença', money(item.exceptionTotalAmount)),
-      detailField('Origem', item.sourceCalculationVersionId ?? item.sourcePriceListVersionId),
+      ...(item.finalUnitPrice
+        ? [detailField('Final com impostos', money(item.finalUnitPrice))]
+        : []),
+      detailField('Diferença total', money(item.exceptionTotalAmount)),
     );
-    card.append(itemHeader, data);
+    card.append(itemHeader, context, data);
     items.append(card);
   }
   itemsSection.append(items);
 
-  content.append(header, facts, justification, itemsSection);
+  content.append(header, justification, itemsSection);
   if (detail.decision) {
     const history = node('section', 'approval-detail-section approval-decision-history');
     history.append(
@@ -233,17 +251,26 @@ function renderDetail(detail: AdminOrderPriceApprovalDetail): void {
       ),
     );
     if (detail.decision.note) history.append(node('p', undefined, detail.decision.note));
+    if (detail.decision.approvedUntil)
+      history.append(
+        node(
+          'p',
+          'approval-decision-validity',
+          `Válida até ${dateTime(detail.decision.approvedUntil)}.`,
+        ),
+      );
     content.append(history);
   }
 
+  const administrator = isAdministrator();
   const ownRequest = detail.requester.id === currentUser?.id;
   const pending = detail.status === 'PENDING';
   const selfWarning = element<HTMLElement>('#admin-approval-self-warning');
-  selfWarning.hidden = !ownRequest || !pending;
+  selfWarning.hidden = !administrator || !ownRequest || !pending;
   const approve = element<HTMLButtonElement>('#admin-approval-approve');
   const reject = element<HTMLButtonElement>('#admin-approval-reject');
-  approve.hidden = !pending;
-  reject.hidden = !pending;
+  approve.hidden = !administrator || !pending;
+  reject.hidden = !administrator || !pending;
   approve.disabled = ownRequest;
   reject.disabled = ownRequest;
   approve.title = ownRequest ? 'Você não pode decidir a própria solicitação.' : '';
@@ -261,10 +288,174 @@ async function openDetail(id: string): Promise<void> {
     element<HTMLButtonElement>('#admin-approval-detail-close'),
   );
   try {
-    selected = (await getAdminOrderPriceApproval(id)).data;
+    selected = isAdministrator()
+      ? (await getAdminOrderPriceApproval(id)).data
+      : (await getMyOrderPriceApproval(id)).data;
     renderDetail(selected);
   } catch (error) {
     content.textContent = apiMessage(error);
+  }
+}
+
+function setNotificationPanelOpen(open: boolean, restoreFocus = false): void {
+  const button = element<HTMLButtonElement>('#admin-approvals-notification-button');
+  const panel = element<HTMLElement>('#admin-approvals-notification-panel');
+  notificationPanelOpen = open && badgeEnabled;
+  panel.hidden = !notificationPanelOpen;
+  button.setAttribute('aria-expanded', String(notificationPanelOpen));
+  if (notificationPanelOpen) void loadNotificationList();
+  else if (restoreFocus) button.focus();
+}
+
+function openNotificationDetail(id: string): void {
+  setNotificationPanelOpen(false);
+  const button = element<HTMLButtonElement>('#admin-approvals-notification-button');
+  button.focus();
+  void openDetail(id);
+}
+
+function renderAdminNotificationList(rows: AdminOrderPriceApprovalSummary[]): void {
+  const list = element<HTMLElement>('#admin-approvals-notification-list');
+  clear(list);
+  if (!rows.length) {
+    list.append(
+      node('div', 'approval-notifications-state', 'Nenhuma solicitação aguardando análise.'),
+    );
+    return;
+  }
+  for (const approval of rows) {
+    const item = node('button', 'approval-notification-item');
+    item.type = 'button';
+    item.addEventListener('click', () => openNotificationDetail(approval.id));
+    const head = node('div', 'approval-notification-item-head');
+    head.append(
+      node('strong', undefined, approval.customer.legalName),
+      node('span', 'approval-notification-wait', waitTime(approval.waitingSeconds)),
+    );
+    const meta = node(
+      'div',
+      'approval-notification-meta',
+      `${approval.requester.name} · ${approval.exceptionCount} de ${approval.itemCount} itens exigem aprovação`,
+    );
+    const summary = node('div', 'approval-notification-summary');
+    summary.append(
+      node('span', 'approval-notification-impact', `Impacto ${money(approval.exceptionAmount)}`),
+    );
+    item.append(head, meta, summary);
+    list.append(item);
+  }
+}
+
+function renderPersonalNotificationList(rows: MyOrderPriceApprovalSummary[]): void {
+  const list = element<HTMLElement>('#admin-approvals-notification-list');
+  clear(list);
+  if (!rows.length) {
+    list.append(
+      node('div', 'approval-notifications-state', 'Nenhuma solicitação nos últimos 7 dias.'),
+    );
+    return;
+  }
+  for (const approval of rows) {
+    const item = node('article', 'approval-notification-item approval-notification-item--personal');
+    const detail = node('button', 'approval-notification-detail');
+    detail.type = 'button';
+    detail.addEventListener('click', () => openNotificationDetail(approval.id));
+    const head = node('div', 'approval-notification-item-head');
+    head.append(node('strong', undefined, approval.customer.legalName), statusTag(approval.status));
+    const decision = approval.decision
+      ? ` · ${approval.decision.reviewer.name}: ${approval.decision.note ?? 'sem observação'}`
+      : '';
+    detail.append(
+      head,
+      node(
+        'div',
+        'approval-notification-meta',
+        `${dateTime(approval.requestedAt)} · ${approval.itemCount} ${approval.itemCount === 1 ? 'item' : 'itens'}${decision}`,
+      ),
+    );
+    const actions = node('div', 'approval-notification-actions');
+    if (approval.status !== 'CONSUMED') {
+      const resume = node(
+        'button',
+        'btn btn-ghost btn-sm',
+        approval.status === 'APPROVED' ? 'Retomar e gerar pedido' : 'Retomar carrinho',
+      );
+      resume.type = 'button';
+      resume.addEventListener('click', () => {
+        setNotificationPanelOpen(false);
+        if (window.location.pathname === '/pedidos/novo') {
+          window.dispatchEvent(
+            new CustomEvent('fluair:approval-resume', { detail: { id: approval.id } }),
+          );
+          return;
+        }
+        window.location.assign(`/pedidos/novo?aprovacao=${encodeURIComponent(approval.id)}`);
+      });
+      actions.append(resume);
+    }
+    if (approval.status === 'PENDING') {
+      const cancel = node('button', 'btn btn-ghost btn-sm', 'Cancelar');
+      cancel.type = 'button';
+      cancel.addEventListener('click', async () => {
+        cancel.disabled = true;
+        try {
+          await cancelMyOrderPriceApproval(approval.id, { expectedVersion: approval.version });
+          window.dispatchEvent(
+            new CustomEvent('fluair:approval-cancelled', { detail: { id: approval.id } }),
+          );
+          await refreshApprovalNotifications();
+        } catch (error) {
+          window.alert(apiMessage(error));
+          cancel.disabled = false;
+        }
+      });
+      actions.append(cancel);
+    }
+    if (actions.childElementCount) item.append(detail, actions);
+    else item.append(detail);
+    list.append(item);
+  }
+}
+
+async function loadNotificationList(): Promise<void> {
+  const request = ++notificationListRequest;
+  const list = element<HTMLElement>('#admin-approvals-notification-list');
+  list.textContent = '';
+  list.append(node('div', 'approval-notifications-state', 'Carregando solicitações…'));
+  try {
+    if (isAdministrator()) {
+      const response = await listAdminOrderPriceApprovals(
+        {
+          status: 'PENDING',
+          page: 1,
+          pageSize: NOTIFICATION_PAGE_SIZE,
+        },
+        { notifyAuthenticationFailure: false },
+      );
+      if (request !== notificationListRequest || !notificationPanelOpen) return;
+      renderAdminNotificationList(response.data);
+      return;
+    }
+    const response = await listMyOrderPriceApprovals(
+      {
+        requestedFrom: personalNotificationStart(),
+        page: 1,
+        pageSize: PERSONAL_NOTIFICATION_PAGE_SIZE,
+      },
+      { notifyAuthenticationFailure: false },
+    );
+    if (request !== notificationListRequest || !notificationPanelOpen) return;
+    renderPersonalNotificationList(response.data);
+  } catch (error) {
+    if (request !== notificationListRequest || !notificationPanelOpen) return;
+    clear(list);
+    const state = node('div', 'approval-notifications-state');
+    state.append(node('span', undefined, apiMessage(error)));
+    const retry = node('button', 'btn btn-ghost btn-sm', 'Tentar novamente');
+    retry.type = 'button';
+    retry.addEventListener('click', () => void loadNotificationList());
+    state.append(retry);
+    list.append(state);
   }
 }
 
@@ -278,7 +469,7 @@ function renderList(rows: AdminOrderPriceApprovalSummary[]): void {
       'approval-list-state',
       'Nenhuma solicitação encontrada para os filtros informados.',
     );
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     row.append(cell);
     body.append(row);
     return;
@@ -307,16 +498,34 @@ function renderList(rows: AdminOrderPriceApprovalSummary[]): void {
     total.dataset.label = 'Total';
     const impact = node('td', undefined, money(approval.exceptionAmount));
     impact.dataset.label = 'Impacto';
+    const result = node('td');
+    result.dataset.label = 'Resultado';
+    result.append(statusTag(approval.status));
+    if (approval.decision) {
+      result.append(
+        node('small', undefined, `Por ${approval.decision.reviewer.name}`),
+        node('small', undefined, dateTime(approval.decision.reviewedAt)),
+      );
+    } else {
+      result.append(node('small', undefined, 'Aguardando decisão'));
+    }
     const action = node('td');
     action.dataset.label = 'Ação';
     const open = node('button', 'btn btn-ghost btn-xs', 'Analisar');
     open.type = 'button';
     open.addEventListener('click', () => void openDetail(approval.id));
     action.append(open);
-    const status = node('div', 'approval-list-status');
-    status.append(statusTag(approval.status));
-    customer.prepend(status);
-    row.append(customer, requester, requestedAt, waiting, exceptions, total, impact, action);
+    row.append(
+      customer,
+      requester,
+      requestedAt,
+      waiting,
+      exceptions,
+      total,
+      impact,
+      result,
+      action,
+    );
     body.append(row);
   }
 }
@@ -331,7 +540,7 @@ async function loadList(): Promise<void> {
   const request = ++listRequest;
   const body = element<HTMLTableSectionElement>('#admin-approvals-body');
   body.innerHTML =
-    '<tr><td class="approval-list-state" colspan="8">Carregando solicitações…</td></tr>';
+    '<tr><td class="approval-list-state" colspan="9">Carregando solicitações…</td></tr>';
   setFeedback('');
   try {
     const status = element<HTMLSelectElement>('#admin-approvals-status').value as
@@ -371,7 +580,7 @@ async function loadList(): Promise<void> {
     clear(body);
     const row = node('tr');
     const cell = node('td', 'approval-list-state');
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     cell.append(node('span', undefined, apiMessage(error)), document.createElement('br'));
     const retry = node('button', 'btn btn-ghost btn-sm', 'Tentar novamente');
     retry.type = 'button';
@@ -383,7 +592,12 @@ async function loadList(): Promise<void> {
 }
 
 function openDecision(kind: 'APPROVE' | 'REJECT'): void {
-  if (!selected || selected.status !== 'PENDING' || selected.requester.id === currentUser?.id)
+  if (
+    !isAdministrator() ||
+    !selected ||
+    selected.status !== 'PENDING' ||
+    selected.requester.id === currentUser?.id
+  )
     return;
   decision = kind;
   const approving = kind === 'APPROVE';
@@ -418,7 +632,7 @@ async function reloadSelected(): Promise<void> {
 
 async function submitDecision(event: SubmitEvent): Promise<void> {
   event.preventDefault();
-  if (!selected || !decision) return;
+  if (!isAdministrator() || !selected || !decision) return;
   const note = element<HTMLTextAreaElement>('#admin-decision-note');
   if (!note.reportValidity()) return;
   const submit = element<HTMLButtonElement>('#admin-decision-submit');
@@ -441,11 +655,11 @@ async function submitDecision(event: SubmitEvent): Promise<void> {
     );
     element<HTMLElement>('#admin-approvals-announcement').textContent =
       `Solicitação ${statusLabels[selected.status].toLowerCase()} com sucesso.`;
-    await Promise.all([loadList(), refreshAdminApprovalBadge()]);
+    await Promise.all([loadList(), refreshApprovalNotifications()]);
   } catch (error) {
     if (error instanceof ApiError && error.code === 'ORDER_PRICE_APPROVAL_CONCURRENT_DECISION') {
       setModalOpen('admin-approval-decision-modal', false);
-      await Promise.all([reloadSelected(), loadList(), refreshAdminApprovalBadge()]);
+      await Promise.all([reloadSelected(), loadList(), refreshApprovalNotifications()]);
       const message =
         'Esta solicitação foi atualizada por outro administrador. O estado mais recente foi carregado.';
       setFeedback(message, true);
@@ -463,21 +677,34 @@ async function submitDecision(event: SubmitEvent): Promise<void> {
 function renderBadge(count: number): void {
   const badge = element<HTMLElement>('#admin-approvals-badge');
   const normalized = Math.max(0, Math.floor(count));
-  badge.textContent = normalized > 99 ? '99+' : String(normalized);
   badge.hidden = normalized === 0 || !badgeEnabled;
-  const link = element<HTMLAnchorElement>('#admin-approvals-nav-link');
-  link.setAttribute(
+  const button = element<HTMLButtonElement>('#admin-approvals-notification-button');
+  button.setAttribute(
     'aria-label',
     normalized
-      ? `Aprovações, ${normalized} pendência${normalized === 1 ? '' : 's'}`
-      : 'Aprovações, sem pendências',
+      ? `Solicitações de aprovação, ${normalized} pendência${normalized === 1 ? '' : 's'}`
+      : 'Solicitações de aprovação, sem pendências',
   );
 }
 
-export async function refreshAdminApprovalBadge(): Promise<void> {
+export async function refreshApprovalNotifications(): Promise<void> {
   if (!badgeEnabled) return;
   try {
-    renderBadge((await countAdminOrderPriceApprovals()).data.pending);
+    const pending = isAdministrator()
+      ? (await countAdminOrderPriceApprovals({ notifyAuthenticationFailure: false })).data.pending
+      : (
+          await listMyOrderPriceApprovals(
+            {
+              status: 'PENDING',
+              requestedFrom: personalNotificationStart(),
+              page: 1,
+              pageSize: 1,
+            },
+            { notifyAuthenticationFailure: false },
+          )
+        ).pagination.total;
+    renderBadge(pending);
+    if (notificationPanelOpen) await loadNotificationList();
   } catch {
     // O contador é complementar: uma falha não deve interromper navegação ou sessão.
   }
@@ -485,27 +712,38 @@ export async function refreshAdminApprovalBadge(): Promise<void> {
 
 function stopBadge(): void {
   badgeEnabled = false;
+  notificationListRequest += 1;
+  setNotificationPanelOpen(false);
   if (pollTimer !== null) window.clearInterval(pollTimer);
   pollTimer = null;
   renderBadge(0);
+  element<HTMLElement>('#admin-approval-notifications').hidden = true;
 }
 
 function onVisibilityChange(): void {
-  if (badgeEnabled && document.visibilityState === 'visible') void refreshAdminApprovalBadge();
+  if (badgeEnabled && document.visibilityState === 'visible') void refreshApprovalNotifications();
 }
 
 function onWindowFocus(): void {
-  if (badgeEnabled) void refreshAdminApprovalBadge();
+  if (badgeEnabled) void refreshApprovalNotifications();
 }
 
 export function configureAdminApprovalNotifications(user: AuthenticatedUser | null): void {
   currentUser = user;
   stopBadge();
-  if (!user?.permissions.includes('order.price-approval.manage')) return;
+  if (!user) return;
   badgeEnabled = true;
-  void refreshAdminApprovalBadge();
+  element<HTMLElement>('#admin-approval-notifications').hidden = false;
+  element<HTMLElement>('#admin-approvals-notification-title').textContent = isAdministrator()
+    ? 'Solicitações de aprovação'
+    : 'Minhas solicitações';
+  element<HTMLElement>('#admin-approvals-notification-subtitle').textContent = isAdministrator()
+    ? 'Preços aguardando análise'
+    : 'Até 3 solicitações dos últimos 7 dias';
+  element<HTMLAnchorElement>('#admin-approvals-nav-link').hidden = !isAdministrator();
+  void refreshApprovalNotifications();
   pollTimer = window.setInterval(() => {
-    if (document.visibilityState === 'visible') void refreshAdminApprovalBadge();
+    if (document.visibilityState === 'visible') void refreshApprovalNotifications();
   }, POLL_INTERVAL_MS);
 }
 
@@ -514,6 +752,32 @@ export function initializeAdminPriceApprovalsPage(): void {
   initialized = true;
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('focus', onWindowFocus);
+  window.addEventListener('fluair:approval-notifications-refresh', () => {
+    void refreshApprovalNotifications();
+  });
+  const notificationButton = element<HTMLButtonElement>('#admin-approvals-notification-button');
+  notificationButton.addEventListener('click', () => {
+    setNotificationPanelOpen(!notificationPanelOpen);
+  });
+  element<HTMLButtonElement>('#admin-approvals-notification-close').addEventListener('click', () =>
+    setNotificationPanelOpen(false, true),
+  );
+  element<HTMLAnchorElement>('#admin-approvals-nav-link').addEventListener('click', () =>
+    setNotificationPanelOpen(false),
+  );
+  document.addEventListener('click', (event) => {
+    if (
+      notificationPanelOpen &&
+      !element<HTMLElement>('#admin-approval-notifications').contains(event.target as Node)
+    )
+      setNotificationPanelOpen(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && notificationPanelOpen) {
+      event.preventDefault();
+      setNotificationPanelOpen(false, true);
+    }
+  });
   element<HTMLFormElement>('#admin-approvals-filters').addEventListener('submit', (event) => {
     event.preventDefault();
     currentPage = 1;

@@ -11,6 +11,21 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://fonts.googleapis.com/**', (route) => route.abort());
   await page.route('https://fonts.gstatic.com/**', (route) => route.abort());
   await page.route('https://cdnjs.cloudflare.com/**', (route) => route.abort());
+  await page.route('**/api/v1/calculations?**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          calculations: [],
+          filters: {
+            priceLists: [{ id: 'implementador', code: 'IMPLEMENTER', name: 'Implementador' }],
+          },
+          pagination: { page: 1, pageSize: 30, total: 0, totalPages: 1 },
+        },
+      }),
+    }),
+  );
 });
 
 test('impede abrir diretamente a fonte legada sem proteção', async ({ page }) => {

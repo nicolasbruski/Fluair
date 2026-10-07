@@ -39,7 +39,9 @@ perfis iniciais e duplicava o fluxo atual.
 
 ## Regras por tipo
 
-- `KIT_COMPONENT`: associa classes e exige código, descrição, preço mínimo e preço normal.
+- `KIT_COMPONENT`: associa classes e exige código, descrição, preço mínimo e preço normal. PIS,
+  Cofins, ICMS e IPI são opcionais, valem para toda a versão e, quando informados nas linhas, devem
+  ser iguais em todos os componentes. Colunas ausentes recebem alíquota zero.
 - `STANDALONE_PRODUCT`: associa segmentos e exige código, descrição, referência, preço unitário e
   IPI informativo marcado como já incluído. A coluna ICMS é importada por produto e por versão da
   lista; arquivos anteriores sem a coluna recebem alíquota zero.

@@ -25,8 +25,10 @@ function item(code = 'PRD-01') {
     description: 'Produto kit sem estrutura',
     reference: 'REF-01',
     unitPrice: new Prisma.Decimal('1234.5678'),
+    pisRate: new Prisma.Decimal('1.6500'),
+    cofinsRate: new Prisma.Decimal('7.6000'),
     ipiRate: new Prisma.Decimal('3.2500'),
-    ipiIncluded: true,
+    ipiIncluded: false,
     icmsRate: new Prisma.Decimal('12.0000'),
     sourceRow: 2,
   };
@@ -82,8 +84,10 @@ describe('catálogo e preço de produto sem estrutura', () => {
             description: 'Produto kit sem estrutura',
             reference: 'REF-01',
             unitPrice: '1234.5678',
+            pisRate: '1.65',
+            cofinsRate: '7.6',
             ipiRate: '3.25',
-            ipiIncluded: true,
+            ipiIncluded: false,
             icmsRate: '12',
           },
         ],
@@ -105,7 +109,7 @@ describe('catálogo e preço de produto sem estrutura', () => {
       priceListVersionId: versionId,
       productCode: 'PRD-01',
       reference: 'REF-01',
-      ipiIncluded: true,
+      ipiIncluded: false,
       icmsRate: new Prisma.Decimal('12'),
       sourceRow: 2,
     });
@@ -117,8 +121,10 @@ describe('catálogo e preço de produto sem estrutura', () => {
     expect(response.data.product).toEqual(
       expect.objectContaining({
         unitPrice: '1234.5678',
+        pisRate: '1.65',
+        cofinsRate: '7.6',
         ipiRate: '3.25',
-        ipiIncluded: true,
+        ipiIncluded: false,
         icmsRate: '12',
       }),
     );

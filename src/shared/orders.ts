@@ -38,11 +38,15 @@ export interface OrderStandaloneCatalogItem {
     maximumOrderQuantity: number | null;
     minimumPrice: string;
     maximumPrice: string;
+    pisRate: string;
+    cofinsRate: string;
     ipiRate: string;
     icmsRate: string;
   }>;
+  pisRate: string;
+  cofinsRate: string;
   ipiRate: string;
-  ipiIncluded: true;
+  ipiIncluded: boolean;
   icmsRate: string;
   priceListVersionId: string;
   priceListVersion: number;
@@ -76,6 +80,10 @@ export interface OrderKitCatalogItem {
   reference?: string | null;
   minimumPrice: string;
   normalPrice: string;
+  pisRate: string;
+  cofinsRate: string;
+  ipiRate: string;
+  icmsRate: string;
   scope: 'STANDARD' | 'CUSTOMER_SPECIFIC';
   calculatedAt: string;
   priceList: { id: string; code: string; name: string; type: PriceListTypeCode };
@@ -156,7 +164,9 @@ export interface OrderDraftCartItem {
   code: string;
   description: string;
   price: number;
-  taxRate: number;
+  /** @deprecated Compatibility with drafts saved before per-tax selection. */
+  taxRate?: number | undefined;
+  taxes?: OrderTaxSelections | undefined;
   referencePrice: number;
   priceEdited: boolean;
   priceReference: 'MINIMUM' | 'NORMAL' | 'UNIT';
@@ -174,12 +184,16 @@ export interface OrderDraftCartItem {
         list: string;
         minimumPrice: number;
         maximumPrice: number;
+        pisRate: number;
+        cofinsRate: number;
         ipiRate: number;
         icmsRate: number;
       }>
     | undefined;
   ipiRate?: number | undefined;
   icmsRate?: number | undefined;
+  pisRate?: number | undefined;
+  cofinsRate?: number | undefined;
   calculationId?: string | undefined;
   lastOrderPrice?: LastOrderPrice | null | undefined;
   quantity: number;
@@ -221,7 +235,11 @@ export interface OrderDraft {
 }
 
 export interface OrderDraftEnvelope {
-  data: { draft: OrderDraft | null };
+  data: {
+    drafts: OrderDraft[];
+    draft?: OrderDraft | null;
+    evicted?: OrderDraft | null;
+  };
 }
 
 export interface OrderDraftSwapInput {
@@ -242,7 +260,9 @@ export interface OrderDraftSaveInput {
 export interface OrderDraftSwapEnvelope {
   data: {
     restored: OrderDraft | null;
-    draft: OrderDraft | null;
+    drafts: OrderDraft[];
+    draft?: OrderDraft | null;
+    evicted?: OrderDraft | null;
   };
 }
 
@@ -253,6 +273,7 @@ export type OrderQuoteLineInput =
       priceListVersionId: string;
       quantity: number;
       negotiatedUnitPrice?: string;
+      appliedTaxes?: OrderAppliedTaxes;
     }
   | {
       kind: 'KIT';
@@ -260,11 +281,39 @@ export type OrderQuoteLineInput =
       priceReference: 'MINIMUM' | 'NORMAL';
       quantity: number;
       negotiatedUnitPrice?: string;
+      appliedTaxes?: OrderAppliedTaxes;
     };
 
 export interface OrderQuoteInput {
   customerId: string;
   lines: OrderQuoteLineInput[];
+}
+
+export interface OrderAppliedTaxes {
+  pis: boolean;
+  cofins: boolean;
+  icms: boolean;
+  ipi: boolean;
+}
+
+export interface OrderTaxSelection {
+  selected: boolean;
+  rate: number;
+}
+
+export interface OrderTaxSelections {
+  pis: OrderTaxSelection;
+  cofins: OrderTaxSelection;
+  icms: OrderTaxSelection;
+  ipi: OrderTaxSelection;
+}
+
+export interface OrderTaxBreakdown {
+  pis: { selected: boolean; rate: string; unitAmount: string };
+  cofins: { selected: boolean; rate: string; unitAmount: string };
+  icms: { selected: boolean; rate: string; unitAmount: string };
+  ipi: { selected: boolean; rate: string; unitAmount: string };
+  totalUnitAmount: string;
 }
 
 export type OrderQuoteLine =
@@ -289,8 +338,12 @@ export type OrderQuoteLine =
       minimumReferencePrice: string;
       normalReferencePrice: string;
       subtotal: string;
+      finalUnitPrice: string;
+      taxes: OrderTaxBreakdown;
+      pisRate: string;
+      cofinsRate: string;
       ipiRate: string;
-      ipiIncluded: true;
+      ipiIncluded: boolean;
       icmsRate: string;
       priceListVersion: { id: string; version: number };
       image: NullableImageReference;
@@ -310,6 +363,12 @@ export type OrderQuoteLine =
       minimumReferencePrice: string;
       normalReferencePrice: string;
       subtotal: string;
+      finalUnitPrice: string;
+      taxes: OrderTaxBreakdown;
+      pisRate: string;
+      cofinsRate: string;
+      ipiRate: string;
+      icmsRate: string;
       priceList: {
         id: string;
         code: string;
@@ -408,10 +467,14 @@ export interface OrderItemSnapshot {
   quantity: string;
   referenceUnitPrice: string;
   negotiatedUnitPrice: string;
+  finalUnitPrice?: string;
+  taxes?: OrderTaxBreakdown | null;
   minimumReferencePrice: string | null;
   normalReferencePrice: string | null;
   ipiRate: string | null;
   icmsRate: string | null;
+  pisRate?: string | null;
+  cofinsRate?: string | null;
   subtotal: string;
 }
 

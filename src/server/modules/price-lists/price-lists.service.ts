@@ -219,6 +219,8 @@ export class PriceListsService {
           normalPrice: item.normalPrice?.toString() ?? null,
           reference: item.reference,
           unitPrice: item.unitPrice?.toString() ?? null,
+          pisRate: item.pisRate.toString(),
+          cofinsRate: item.cofinsRate.toString(),
           ipiRate: item.ipiRate?.toString() ?? null,
           ipiIncluded: item.ipiIncluded,
           icmsRate: item.icmsRate.toString(),

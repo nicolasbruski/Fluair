@@ -142,6 +142,8 @@ export class PrismaPriceListsRepository implements PriceListsRepository {
           normalPrice: true,
           reference: true,
           unitPrice: true,
+          pisRate: true,
+          cofinsRate: true,
           ipiRate: true,
           ipiIncluded: true,
           icmsRate: true,
@@ -192,6 +194,9 @@ export class PrismaPriceListsRepository implements PriceListsRepository {
           normalPrice: 'normalPrice' in item ? new Prisma.Decimal(item.normalPrice) : null,
           reference: 'reference' in item ? item.reference : null,
           unitPrice: 'unitPrice' in item ? new Prisma.Decimal(item.unitPrice) : null,
+          pisRate: 'pisRate' in item ? new Prisma.Decimal(item.pisRate) : new Prisma.Decimal(0),
+          cofinsRate:
+            'cofinsRate' in item ? new Prisma.Decimal(item.cofinsRate) : new Prisma.Decimal(0),
           ipiRate: 'ipiRate' in item ? new Prisma.Decimal(item.ipiRate) : null,
           ipiIncluded: 'ipiIncluded' in item ? item.ipiIncluded : null,
           icmsRate: 'icmsRate' in item ? new Prisma.Decimal(item.icmsRate) : new Prisma.Decimal(0),

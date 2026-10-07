@@ -125,7 +125,38 @@ export class PrismaOrderEmailDeliveryRepository implements OrderEmailDeliveryRep
             reference: item.referenceSnapshot,
             quantity: item.quantity.toFixed(4),
             unit: item.unitSnapshot,
+            referenceUnitPrice: item.referenceUnitPrice.toFixed(4),
             negotiatedUnitPrice: item.negotiatedUnitPrice.toFixed(4),
+            finalUnitPrice: (item.finalUnitPrice ?? item.negotiatedUnitPrice).toFixed(4),
+            taxes:
+              item.pisRate !== null ||
+              item.cofinsRate !== null ||
+              item.icmsRate !== null ||
+              item.ipiRate !== null
+                ? {
+                    pis: {
+                      selected: item.pisSelected,
+                      rate: item.pisRate?.toFixed(4) ?? '0.0000',
+                      unitAmount: item.pisUnitAmount?.toFixed(4) ?? '0.0000',
+                    },
+                    cofins: {
+                      selected: item.cofinsSelected,
+                      rate: item.cofinsRate?.toFixed(4) ?? '0.0000',
+                      unitAmount: item.cofinsUnitAmount?.toFixed(4) ?? '0.0000',
+                    },
+                    icms: {
+                      selected: item.icmsSelected,
+                      rate: item.icmsRate?.toFixed(4) ?? '0.0000',
+                      unitAmount: item.icmsUnitAmount?.toFixed(4) ?? '0.0000',
+                    },
+                    ipi: {
+                      selected: item.ipiSelected,
+                      rate: item.ipiRate?.toFixed(4) ?? '0.0000',
+                      unitAmount: item.ipiUnitAmount?.toFixed(4) ?? '0.0000',
+                    },
+                    totalUnitAmount: item.totalTaxUnitAmount?.toFixed(4) ?? '0.0000',
+                  }
+                : null,
             subtotal: item.subtotal.toFixed(4),
           })),
         },

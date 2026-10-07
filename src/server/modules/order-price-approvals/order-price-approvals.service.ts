@@ -151,6 +151,7 @@ export class OrderPriceApprovalsService {
       page: query.page,
       pageSize: query.pageSize,
       ...(query.status ? { status: query.status } : {}),
+      ...(query.requestedFrom ? { requestedFrom: query.requestedFrom } : {}),
     });
   }
 

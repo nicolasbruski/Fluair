@@ -11,7 +11,7 @@ import type {
   OrderPriceApprovalListEnvelope,
   OrderPriceApprovalStatusCode,
 } from '../../shared/order-price-approvals.js';
-import { apiRequest } from './api.js';
+import { apiRequest, type ApiRequestOptions } from './api.js';
 
 export function createOrderPriceApproval(
   input: CreateOrderPriceApprovalInput,
@@ -27,17 +27,21 @@ export function createOrderPriceApproval(
 export function listMyOrderPriceApprovals(
   input: {
     status?: OrderPriceApprovalStatusCode;
+    requestedFrom?: string;
     page?: number;
     pageSize?: number;
   } = {},
+  options?: ApiRequestOptions,
 ): Promise<OrderPriceApprovalListEnvelope<MyOrderPriceApprovalSummary>> {
   const query = new URLSearchParams({
     page: String(input.page ?? 1),
     pageSize: String(input.pageSize ?? 20),
   });
   if (input.status) query.set('status', input.status);
+  if (input.requestedFrom) query.set('requestedFrom', input.requestedFrom);
   return apiRequest<OrderPriceApprovalListEnvelope<MyOrderPriceApprovalSummary>>(
     `/api/v1/order-price-approvals/mine?${query}`,
+    options,
   );
 }
 
@@ -70,12 +74,18 @@ export interface AdminOrderPriceApprovalsQuery {
   pageSize?: number;
 }
 
-export function countAdminOrderPriceApprovals(): Promise<OrderPriceApprovalCountEnvelope> {
-  return apiRequest<OrderPriceApprovalCountEnvelope>('/api/v1/order-price-approvals/admin/count');
+export function countAdminOrderPriceApprovals(
+  options?: ApiRequestOptions,
+): Promise<OrderPriceApprovalCountEnvelope> {
+  return apiRequest<OrderPriceApprovalCountEnvelope>(
+    '/api/v1/order-price-approvals/admin/count',
+    options,
+  );
 }
 
 export function listAdminOrderPriceApprovals(
   input: AdminOrderPriceApprovalsQuery = {},
+  options?: ApiRequestOptions,
 ): Promise<OrderPriceApprovalListEnvelope<AdminOrderPriceApprovalSummary>> {
   const query = new URLSearchParams({
     page: String(input.page ?? 1),
@@ -86,6 +96,7 @@ export function listAdminOrderPriceApprovals(
   }
   return apiRequest<OrderPriceApprovalListEnvelope<AdminOrderPriceApprovalSummary>>(
     `/api/v1/order-price-approvals/admin?${query}`,
+    options,
   );
 }
 

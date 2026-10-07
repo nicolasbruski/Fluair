@@ -293,9 +293,9 @@ async function submitLogin(event: SubmitEvent): Promise<void> {
   setSubmitting(true);
   try {
     const response = await login(email, password);
+    const returned = safeReturnDestination(response.data.user);
     authenticatedUser = response.data.user;
     configureAdminApprovalNotifications(authenticatedUser);
-    const returned = safeReturnDestination(authenticatedUser);
     const destination = returned?.route ?? firstAllowedRoute(authenticatedUser);
     if (destination) navigateTo(destination, true, returned?.href);
     else {

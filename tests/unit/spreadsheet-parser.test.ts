@@ -162,12 +162,57 @@ describe('parser de planilhas de preço', () => {
     });
   });
 
+  it('lê e preserva impostos únicos nas listas com estrutura', () => {
+    const result = parseKitComponentWorkbook(
+      workbook([
+        ['Código', 'Descrição', 'Valor Mínimo', 'Valor Normal', 'PIS', 'Cofins', 'ICMS', 'IPI'],
+        ['A-1', 'Componente A', 10, 20, '1,65%', '7,6%', '18%', '5%'],
+        ['B-2', 'Componente B', 30, 40, '1,65%', '7,6%', '18%', '5%'],
+      ]),
+    );
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        code: 'A-1',
+        pisRate: 1.65,
+        cofinsRate: 7.6,
+        icmsRate: 18,
+        ipiRate: 5,
+        ipiIncluded: false,
+      }),
+      expect.objectContaining({ code: 'B-2', pisRate: 1.65, cofinsRate: 7.6 }),
+    ]);
+  });
+
+  it('rejeita alíquotas conflitantes dentro da mesma lista com estrutura', () => {
+    expectSpreadsheetError(
+      () =>
+        parseKitComponentWorkbook(
+          workbook([
+            ['Código', 'Descrição', 'Valor Mínimo', 'Valor Normal', 'ICMS'],
+            ['A-1', 'Componente A', 10, 20, '18%'],
+            ['B-2', 'Componente B', 30, 40, '12%'],
+          ]),
+        ),
+      'CONFLICTING_KIT_TAX_RATE',
+    );
+  });
+
   it('lê produto sem estrutura e mantém os impostos da lista', () => {
     const result = parseStandaloneProductWorkbook(
       workbook([
-        ['Código', 'Descrição', 'Referência', 'Valor', 'IPI', 'ICMS'],
+        ['Código', 'Descrição', 'Referência', 'Valor', 'PIS', 'Cofins', 'IPI', 'ICMS'],
         [],
-        ['PRD_01', 'Produto\nde teste', 'REF\n01', 'R$ 1.234,56', '3,25%', '12%'],
+        [
+          'PRD_01',
+          'Produto\nde teste',
+          'REF\n01',
+          'R$ 1.234,56',
+          '1,65%',
+          '7,60%',
+          '3,25%',
+          '12%',
+        ],
       ]),
     );
 
@@ -180,8 +225,10 @@ describe('parser de planilhas de preço', () => {
           description: 'Produto de teste',
           reference: 'REF 01',
           unitPrice: 1234.56,
+          pisRate: 1.65,
+          cofinsRate: 7.6,
           ipiRate: 3.25,
-          ipiIncluded: true,
+          ipiIncluded: false,
           icmsRate: 12,
           sourceRow: 3,
         }),

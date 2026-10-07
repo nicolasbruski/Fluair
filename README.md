@@ -99,7 +99,7 @@ de situação geram eventos em `audit_logs`. A exportação da tela gera CSV UTF
 - `GET /api/v1/calculations/:id` — retorna a fotografia completa e os componentes persistidos de uma versão.
 - `GET /api/v1/calculations/:id/history` — retorna as versões reais da mesma combinação de kit e lista.
 - `GET /api/v1/price-lists/:id/products` — pesquisa código, descrição e referência somente na versão ativa;
-- `GET /api/v1/price-lists/:id/products/:code/price` — resolve preço decimal, referência, IPI e ICMS informativos da versão ativa.
+- `GET /api/v1/price-lists/:id/products/:code/price` — resolve preço-base, referência e alíquotas de PIS, Cofins, ICMS e IPI da versão ativa.
 - `GET /api/v1/orders/price-lists` — retorna listas avulsas permitidas para cliente e quantidade;
 - `GET /api/v1/orders/catalog` — retorna produtos da versão ativa e kits compatíveis;
 - `POST /api/v1/orders/quote` — recalcula o carrinho, resolve destinatários e cria uma revisão curta sem persistir;

@@ -15,4 +15,19 @@ describe('valores monetários do carrinho', () => {
     expect(orderUnitAmount({ price: 19.999, taxRate: 3.25 })).toBe(20);
     expect(orderLineAmount({ price: 19.9, taxRate: 3.25, quantity: 3 })).toBe(59.7);
   });
+  it('soma somente os quatro impostos selecionados ao preço-base', () => {
+    const product = {
+      price: 100,
+      quantity: 2,
+      taxes: {
+        pis: { selected: true, rate: 1.65 },
+        cofins: { selected: true, rate: 7.6 },
+        icms: { selected: false, rate: 12 },
+        ipi: { selected: false, rate: 5 },
+      },
+    };
+
+    expect(orderUnitAmount(product)).toBe(109.25);
+    expect(orderLineAmount(product)).toBe(218.5);
+  });
 });

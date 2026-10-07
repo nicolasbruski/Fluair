@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import type { AuthenticatedUser } from '../../../shared/auth.js';
 import { getRequestId } from '../../middleware/request-context.js';
-import { requirePermission } from '../auth/auth.middleware.js';
+import { requireAdministrator, requirePermission } from '../auth/auth.middleware.js';
 import type { AuthService } from '../auth/auth.service.js';
 import {
   cancelOrderPriceApprovalSchema,
@@ -59,15 +59,11 @@ export function createOrderPriceApprovalsRouter(
     },
   );
 
-  router.get(
-    '/admin/count',
-    requirePermission(auth, 'order.price-approval.manage'),
-    async (_req, res) => {
-      res.status(200).json(await approvals.adminCount());
-    },
-  );
+  router.get('/admin/count', requireAdministrator(auth), async (_req, res) => {
+    res.status(200).json(await approvals.adminCount());
+  });
 
-  router.get('/admin', requirePermission(auth, 'order.price-approval.manage'), async (req, res) => {
+  router.get('/admin', requireAdministrator(auth), async (req, res) => {
     res
       .status(200)
       .json(
@@ -78,50 +74,38 @@ export function createOrderPriceApprovalsRouter(
       );
   });
 
-  router.get(
-    '/admin/:id',
-    requirePermission(auth, 'order.price-approval.manage'),
-    async (req, res) => {
-      const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
-      res.status(200).json(await approvals.adminDetails(id, getRequestId(req)));
-    },
-  );
+  router.get('/admin/:id', requireAdministrator(auth), async (req, res) => {
+    const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
+    res.status(200).json(await approvals.adminDetails(id, getRequestId(req)));
+  });
 
-  router.post(
-    '/admin/:id/approve',
-    requirePermission(auth, 'order.price-approval.manage'),
-    async (req, res) => {
-      const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
-      res
-        .status(200)
-        .json(
-          await approvals.approve(
-            id,
-            approveOrderPriceApprovalSchema.parse(req.body),
-            res.locals.authenticatedUser as AuthenticatedUser,
-            getRequestId(req),
-          ),
-        );
-    },
-  );
+  router.post('/admin/:id/approve', requireAdministrator(auth), async (req, res) => {
+    const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
+    res
+      .status(200)
+      .json(
+        await approvals.approve(
+          id,
+          approveOrderPriceApprovalSchema.parse(req.body),
+          res.locals.authenticatedUser as AuthenticatedUser,
+          getRequestId(req),
+        ),
+      );
+  });
 
-  router.post(
-    '/admin/:id/reject',
-    requirePermission(auth, 'order.price-approval.manage'),
-    async (req, res) => {
-      const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
-      res
-        .status(200)
-        .json(
-          await approvals.reject(
-            id,
-            rejectOrderPriceApprovalSchema.parse(req.body),
-            res.locals.authenticatedUser as AuthenticatedUser,
-            getRequestId(req),
-          ),
-        );
-    },
-  );
+  router.post('/admin/:id/reject', requireAdministrator(auth), async (req, res) => {
+    const { id } = orderPriceApprovalIdParamsSchema.parse(req.params);
+    res
+      .status(200)
+      .json(
+        await approvals.reject(
+          id,
+          rejectOrderPriceApprovalSchema.parse(req.body),
+          res.locals.authenticatedUser as AuthenticatedUser,
+          getRequestId(req),
+        ),
+      );
+  });
 
   router.get(
     '/:id',

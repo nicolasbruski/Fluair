@@ -150,12 +150,24 @@ export class PrismaOrdersRepository implements OrdersRepository {
                 quantity: decimal(item.quantity),
                 referenceUnitPrice: decimal(item.referenceUnitPrice),
                 negotiatedUnitPrice: decimal(item.negotiatedUnitPrice),
+                finalUnitPrice: decimal(item.finalUnitPrice ?? item.negotiatedUnitPrice),
                 minimumReferencePrice:
                   item.minimumReferencePrice === null ? null : decimal(item.minimumReferencePrice),
                 normalReferencePrice:
                   item.normalReferencePrice === null ? null : decimal(item.normalReferencePrice),
+                pisSelected: item.taxes?.pis.selected ?? false,
+                pisRate: item.pisRate == null ? null : decimal(item.pisRate),
+                pisUnitAmount: item.taxes ? decimal(item.taxes.pis.unitAmount) : null,
+                cofinsSelected: item.taxes?.cofins.selected ?? false,
+                cofinsRate: item.cofinsRate == null ? null : decimal(item.cofinsRate),
+                cofinsUnitAmount: item.taxes ? decimal(item.taxes.cofins.unitAmount) : null,
+                icmsSelected: item.taxes?.icms.selected ?? false,
                 ipiRate: item.ipiRate === null ? null : decimal(item.ipiRate),
+                ipiSelected: item.taxes?.ipi.selected ?? false,
+                ipiUnitAmount: item.taxes ? decimal(item.taxes.ipi.unitAmount) : null,
                 icmsRate: item.icmsRate === null ? null : decimal(item.icmsRate),
+                icmsUnitAmount: item.taxes ? decimal(item.taxes.icms.unitAmount) : null,
+                totalTaxUnitAmount: decimal(item.taxes?.totalUnitAmount ?? '0'),
                 subtotal: decimal(item.subtotal),
               })),
             },
@@ -377,8 +389,40 @@ export class PrismaOrdersRepository implements OrdersRepository {
           quantity: item.quantity.toFixed(4),
           referenceUnitPrice: item.referenceUnitPrice.toFixed(4),
           negotiatedUnitPrice: item.negotiatedUnitPrice.toFixed(4),
+          finalUnitPrice: item.finalUnitPrice.toFixed(4),
           minimumReferencePrice: item.minimumReferencePrice?.toFixed(4) ?? null,
           normalReferencePrice: item.normalReferencePrice?.toFixed(4) ?? null,
+          taxes:
+            item.pisRate !== null ||
+            item.cofinsRate !== null ||
+            item.icmsRate !== null ||
+            item.ipiRate !== null
+              ? {
+                  pis: {
+                    selected: item.pisSelected,
+                    rate: item.pisRate?.toFixed(4) ?? '0.0000',
+                    unitAmount: item.pisUnitAmount?.toFixed(4) ?? '0.0000',
+                  },
+                  cofins: {
+                    selected: item.cofinsSelected,
+                    rate: item.cofinsRate?.toFixed(4) ?? '0.0000',
+                    unitAmount: item.cofinsUnitAmount?.toFixed(4) ?? '0.0000',
+                  },
+                  icms: {
+                    selected: item.icmsSelected,
+                    rate: item.icmsRate?.toFixed(4) ?? '0.0000',
+                    unitAmount: item.icmsUnitAmount?.toFixed(4) ?? '0.0000',
+                  },
+                  ipi: {
+                    selected: item.ipiSelected,
+                    rate: item.ipiRate?.toFixed(4) ?? '0.0000',
+                    unitAmount: item.ipiUnitAmount?.toFixed(4) ?? '0.0000',
+                  },
+                  totalUnitAmount: item.totalTaxUnitAmount.toFixed(4),
+                }
+              : null,
+          pisRate: item.pisRate?.toFixed(4) ?? null,
+          cofinsRate: item.cofinsRate?.toFixed(4) ?? null,
           ipiRate: item.ipiRate?.toFixed(4) ?? null,
           icmsRate: item.icmsRate?.toFixed(4) ?? null,
           subtotal: item.subtotal.toFixed(4),

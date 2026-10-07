@@ -172,6 +172,10 @@ test('exibe fotos de kit e produto no drawer sem adicionar ao ampliar e preserva
               description: 'Kit com foto',
               minimumPrice: '100',
               normalPrice: '120',
+              pisRate: '1.0000',
+              cofinsRate: '2.0000',
+              icmsRate: '3.0000',
+              ipiRate: '4.0000',
               scope: 'STANDARD',
               calculatedAt: '2026-09-20T12:00:00.000Z',
               priceList: { id: 'list-kit', code: 'KIT', name: 'Kits', type: 'KIT_COMPONENT' },
@@ -224,8 +228,31 @@ test('exibe fotos de kit e produto no drawer sem adicionar ao ampliar e preserva
   await page.screenshot({ path: 'tmp/task-004-orders-mobile.png', fullPage: true });
 });
 
-async function mockSession(page: Page, sessionUser = user): Promise<void> {
-  let draft: OrderDraft | null = null;
+async function mockSession(
+  page: Page,
+  sessionUser = user,
+  draftCustomers: Customer[] = customers,
+): Promise<void> {
+  let drafts: OrderDraft[] = [];
+  let draftClock = 0;
+  const saveDraft = (customerId: string, payload: OrderDraftPayload): OrderDraft => {
+    const existing = drafts.find((draft) => draft.customer.id === customerId);
+    const customer = draftCustomers.find((item) => item.id === customerId);
+    const draft: OrderDraft = {
+      id: existing?.id ?? `d0000000-0000-4000-8000-${customerId.slice(-12)}`,
+      revision: Number(existing?.revision ?? 0) + 1,
+      customer: {
+        id: customerId,
+        code: customer?.code ?? 'SALVO',
+        legalName: customer?.legalName ?? 'Cliente salvo',
+        active: true,
+      },
+      payload,
+      updatedAt: new Date(Date.UTC(2026, 9, 2, 15, draftClock++)).toISOString(),
+    };
+    drafts = [draft, ...drafts.filter((item) => item.customer.id !== customerId)].slice(0, 5);
+    return draft;
+  };
   await page.route('**/api/v1/auth/me', (route) =>
     route.fulfill({
       status: 200,
@@ -241,7 +268,8 @@ async function mockSession(page: Page, sessionUser = user): Promise<void> {
   await page.route('**/api/v1/orders/draft**', async (route) => {
     const request = route.request();
     if (request.method() === 'DELETE') {
-      draft = null;
+      const customerId = new URL(request.url()).searchParams.get('customerId');
+      drafts = customerId ? drafts.filter((draft) => draft.customer.id !== customerId) : [];
       await route.fulfill({ status: 204, body: '' });
       return;
     }
@@ -250,26 +278,14 @@ async function mockSession(page: Page, sessionUser = user): Promise<void> {
         targetCustomerId: string;
         current?: { customerId: string; payload: OrderDraftPayload };
       };
-      const restored = draft?.customer?.id === input.targetCustomerId ? draft : null;
+      const restored = drafts.find((draft) => draft.customer.id === input.targetCustomerId) ?? null;
       if (input.current) {
-        const customer = customers.find((item) => item.id === input.current!.customerId);
-        draft = {
-          id: 'd0000000-0000-4000-8000-000000000001',
-          revision: Number(draft?.revision ?? 0) + 1,
-          customer: {
-            id: input.current.customerId,
-            code: customer?.code ?? 'SALVO',
-            legalName: customer?.legalName ?? 'Cliente salvo',
-            active: true,
-          },
-          payload: input.current.payload,
-          updatedAt: '2026-10-02T15:00:00.000Z',
-        };
+        saveDraft(input.current.customerId, input.current.payload);
       }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ data: { restored, draft } }),
+        body: JSON.stringify({ data: { restored, drafts } }),
       });
       return;
     }
@@ -278,30 +294,18 @@ async function mockSession(page: Page, sessionUser = user): Promise<void> {
         customerId: string;
         payload: OrderDraftPayload;
       };
-      const customer = customers.find((item) => item.id === input.customerId);
-      draft = {
-        id: 'd0000000-0000-4000-8000-000000000001',
-        revision: Number(draft?.revision ?? 0) + 1,
-        customer: {
-          id: input.customerId,
-          code: customer?.code ?? 'SALVO',
-          legalName: customer?.legalName ?? 'Cliente salvo',
-          active: true,
-        },
-        payload: input.payload,
-        updatedAt: '2026-10-02T15:00:00.000Z',
-      };
+      const draft = saveDraft(input.customerId, input.payload);
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ data: { draft } }),
+        body: JSON.stringify({ data: { draft, drafts } }),
       });
       return;
     }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: { draft } }),
+      body: JSON.stringify({ data: { drafts } }),
     });
   });
 }
@@ -437,6 +441,19 @@ test('exibe no drawer o valor do produto avulso em todas as faixas compatíveis'
       cardWidth / 2,
     );
   await page.locator('label[for="order-hide-reference-prices"]').click();
+  for (const price of await prices.all()) await expect(price).toBeHidden();
+  await expect(page.locator('#hide-reference-prices')).toBeChecked();
+  await page.locator('label[for="order-hide-reference-prices"]').click();
+  for (const price of await prices.all()) await expect(price).toBeVisible();
+  await expect(page.locator('#order-hide-reference-prices')).not.toBeChecked();
+  await page.locator('#order-drawer-close').click();
+  await page.locator('label[for="hide-reference-prices"]').click();
+  await page.getByRole('button', { name: 'Adicionar mais itens' }).click();
+  for (const price of await prices.all()) await expect(price).toBeHidden();
+  await expect(page.locator('#order-hide-reference-prices')).toBeChecked();
+  await page.locator('#order-drawer-close').click();
+  await page.locator('label[for="hide-reference-prices"]').click();
+  await page.getByRole('button', { name: 'Adicionar mais itens' }).click();
   for (const price of await prices.all()) await expect(price).toBeVisible();
   await page
     .getByRole('button', { name: /Adicionar P-FAIXAS por R\$\s*44,00 da lista Lista 50-99/ })
@@ -444,8 +461,11 @@ test('exibe no drawer o valor do produto avulso em todas as faixas compatíveis'
   await expect(page.locator('#pedidoCartBadge')).toHaveText('1');
   await expect(page.getByLabel('Quantidade de P-FAIXAS')).toHaveValue('1');
   await expect(page.getByLabel('Preço unitário de P-FAIXAS')).toHaveValue('44,00');
-  await expect(page.getByLabel('Imposto percentual de P-FAIXAS')).toHaveValue('17.50');
-  await expect(page.locator('#pedidoSubNor')).toHaveText(/R\$\s*44,00/);
+  await expect(page.getByLabel('Aplicar PIS de 0% em P-FAIXAS')).toBeChecked();
+  await expect(page.getByLabel('Aplicar Cofins de 0% em P-FAIXAS')).toBeChecked();
+  await expect(page.getByLabel('Aplicar ICMS de 0% em P-FAIXAS')).toBeChecked();
+  await expect(page.getByLabel('Aplicar IPI de 17,5% em P-FAIXAS')).toBeChecked();
+  await expect(page.locator('#pedidoSubNor')).toHaveText(/R\$\s*51,70/);
 });
 
 test('pré-cadastra e seleciona um cliente na tela de Pedidos', async ({ page }) => {
@@ -736,13 +756,13 @@ test('remove o usuário incorporado à descrição no drawer e no carrinho', asy
 });
 
 test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({ page }) => {
-  await mockSession(page);
   const oneListCustomer: Customer = {
     ...customers[0]!,
     id: '10000000-0000-4000-8000-000000000004',
     code: 'C00004',
     legalName: 'Cliente Uma Lista',
   };
+  await mockSession(page, user, [...customers, oneListCustomer]);
   await page.route('**/api/v1/customers**', (route) => {
     if (new URL(route.request().url()).pathname.endsWith(`/${oneListCustomer.id}`)) {
       return route.fulfill({
@@ -971,6 +991,10 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               description: 'Kit calculado real',
               minimumPrice: '100',
               normalPrice: '120',
+              pisRate: '1.0000',
+              cofinsRate: '2.0000',
+              icmsRate: '3.0000',
+              ipiRate: '4.0000',
               calculatedAt: '2026-08-15T14:30:00.000Z',
               priceList: {
                 id: '9',
@@ -1058,7 +1082,21 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               unitPrice: '120.0000',
               referenceUnitPrice: '120.0000',
               negotiatedUnitPrice: '120.0000',
-              subtotal: '120.0000',
+              minimumReferencePrice: '100.0000',
+              normalReferencePrice: '120.0000',
+              finalUnitPrice: '132.0000',
+              subtotal: '132.0000',
+              pisRate: '1.0000',
+              cofinsRate: '2.0000',
+              icmsRate: '3.0000',
+              ipiRate: '4.0000',
+              taxes: {
+                pis: { selected: true, rate: '1.0000', unitAmount: '1.2000' },
+                cofins: { selected: true, rate: '2.0000', unitAmount: '2.4000' },
+                icms: { selected: true, rate: '3.0000', unitAmount: '3.6000' },
+                ipi: { selected: true, rate: '4.0000', unitAmount: '4.8000' },
+                totalUnitAmount: '12.0000',
+              },
               priceList: {
                 id: '9',
                 code: 'KIT',
@@ -1087,10 +1125,22 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               unitPrice: '26.0000',
               referenceUnitPrice: '26.0000',
               negotiatedUnitPrice: '26.0000',
-              subtotal: '26.0000',
+              minimumReferencePrice: '26.0000',
+              normalReferencePrice: '26.0000',
+              finalUnitPrice: '31.9800',
+              subtotal: '31.9800',
+              pisRate: '0.0000',
+              cofinsRate: '0.0000',
               ipiRate: '5.0000',
-              ipiIncluded: true,
+              ipiIncluded: false,
               icmsRate: '18.0000',
+              taxes: {
+                pis: { selected: true, rate: '0.0000', unitAmount: '0.0000' },
+                cofins: { selected: true, rate: '0.0000', unitAmount: '0.0000' },
+                icms: { selected: true, rate: '18.0000', unitAmount: '4.6800' },
+                ipi: { selected: true, rate: '5.0000', unitAmount: '1.3000' },
+                totalUnitAmount: '5.9800',
+              },
               priceList: {
                 id: '60000000-0000-4000-8000-000000000001',
                 code: 'AV-A',
@@ -1110,9 +1160,9 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               },
             },
           ],
-          total: '146.0000',
-          referenceTotal: '146.0000',
-          warnings: ['O IPI já está incluído.'],
+          total: '163.9800',
+          referenceTotal: '163.9800',
+          warnings: [],
           quotedAt: '2026-09-13T12:00:00.000Z',
         },
       }),
@@ -1201,15 +1251,15 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await page.locator('#pedido-client-trigger').click();
   await page.getByRole('option', { name: /Lider Sul Ltda/ }).click();
   await expect(page.locator('#pedidoCartBadge')).toHaveText('0');
-  await expect(page.locator('#order-saved-draft')).toBeVisible();
-  await page.getByRole('button', { name: 'Retomar' }).click();
+  await expect(page.locator('#order-draft-history')).toBeVisible();
+  await page.getByRole('button', { name: /Retomar pedido de Cliente Uma Lista/ }).click();
   await expect(page.locator('#pedidoCartBadge')).toHaveText('1');
   await expect(page.locator('#pedidoItems')).toContainText('Kit calculado real');
   await page.locator('#pedido-client-clear').click();
   await expect(page.locator('#pedidoCliente')).toHaveValue('');
   await expect(page.locator('#pedidoCartBadge')).toHaveText('0');
-  await expect(page.locator('#order-saved-draft')).toBeVisible();
-  await page.getByRole('button', { name: 'Retomar' }).click();
+  await expect(page.locator('#order-draft-history')).toBeVisible();
+  await page.getByRole('button', { name: /Retomar pedido de Cliente Uma Lista/ }).click();
   await expect(page.locator('#pedidoCliente')).toHaveValue(oneListCustomer.id);
   await expect(page.locator('#pedidoCartBadge')).toHaveText('1');
   await page.locator('#pedido-client-trigger').click();
@@ -1220,12 +1270,20 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(drawer.getByText('Válvula real')).toBeVisible();
   await expect(drawer.getByText('Kit do cliente', { exact: true })).toBeVisible();
   await expect(drawer.getByText('Produto avulso', { exact: true })).toBeVisible();
+  await expect(drawer.getByText('Última venda: R$ 115,00').first()).toBeVisible();
+  await expect(drawer.getByText('Última venda: R$ 24,50').first()).toBeVisible();
+  await expect(drawer.locator('.order-card-last-price').first()).toHaveAttribute(
+    'title',
+    'PED-2026-000099 · 01/10/2026',
+  );
   await expect(drawer.getByText('50-99: R$ 25,50', { exact: true })).toBeVisible();
   await expect(drawer.getByText('100+: R$ 25,50', { exact: true })).toBeVisible();
   await expect(drawer.getByRole('button', { name: 'Kits' })).toBeVisible();
   await expect(drawer.locator('.order-card-prices .reference-price').first()).toBeVisible();
   await drawer.locator('label[for="order-hide-reference-prices"]').click();
   await expect(drawer.locator('.order-card-prices .reference-price').first()).toBeHidden();
+  for (const range of await drawer.locator('.order-card-price-range').all())
+    await expect(range).toBeHidden();
   await expect(page.locator('#hide-reference-prices')).toBeChecked();
   await drawer.locator('label[for="order-hide-reference-prices"]').click();
   await expect(drawer.locator('.order-card-prices .reference-price').first()).toBeVisible();
@@ -1253,13 +1311,13 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
     'PED-2026-000099 · 01/10/2026',
   );
   await expect(page.locator('#pedidoItems')).toContainText(
-    'Revenda 100+ · Mínimo R$ 22,00 · Máximo R$ 25,50 · IPI 3,25% · ICMS 12%',
+    'Revenda 100+ · Mínimo R$ 22,00 · Máximo R$ 25,50 · PIS 0% · Cofins 0% · ICMS 12% · IPI 3,25%',
   );
   await expect(page.locator('#pedidoItems')).toContainText(
-    'Revenda até 49 peças · Mínimo R$ 22,00 · Máximo R$ 25,50 · IPI 5% · ICMS 18%',
+    'Revenda até 49 peças · Mínimo R$ 22,00 · Máximo R$ 25,50 · PIS 0% · Cofins 0% · ICMS 18% · IPI 5%',
   );
   await expect(page.locator('#pedidoItems')).toContainText(
-    'Impostos da lista selecionada: IPI 5% · ICMS 18%',
+    'Impostos da lista selecionada: PIS 0% · Cofins 0% · ICMS 18% · IPI 5%',
   );
   await expect(page.locator('#pedidoItems')).not.toContainText('origem');
   await expect(page.locator('#pedidoItems .order-cart-reference-prices').first()).toHaveCSS(
@@ -1280,9 +1338,13 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(page.locator('#pedidoItems .reference-price').first()).toBeVisible();
   await expect(page.locator('#pedidoItems')).toContainText('Kit');
   await expect(page.locator('#pedidoItems')).toContainText('Produto');
-  await expect(page.getByLabel('Imposto percentual de P-100')).toHaveValue('5.00');
+  await expect(page.getByLabel('Aplicar PIS de 1% em K-200')).toBeChecked();
+  await expect(page.getByLabel('Aplicar Cofins de 2% em K-200')).toBeChecked();
+  await expect(page.getByLabel('Aplicar ICMS de 3% em K-200')).toBeChecked();
+  await expect(page.getByLabel('Aplicar IPI de 4% em K-200')).toBeChecked();
+  await expect(page.getByLabel('Aplicar IPI de 5% em P-100')).toBeChecked();
   await page.getByLabel('Preço unitário de P-100').fill('30,00');
-  await expect(page.locator('#pedidoSubNor')).toHaveText(/R\$\s*150,00/);
+  await expect(page.locator('#pedidoSubNor')).toHaveText(/R\$\s*168,90/);
   await page.getByRole('button', { name: 'Adicionar mais itens' }).click();
   await drawer.getByRole('searchbox', { name: 'Buscar itens do pedido' }).fill('REF-X');
   await expect.poll(() => catalogSearches).toContain('REF-X');
@@ -1292,6 +1354,13 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(page.locator('#order-quote-feedback')).toContainText('Cotação validada');
   await expect(review).toHaveClass(/open/);
   await expect(review).toContainText('nicolasbruski7@gmail.com');
+  await expect(review.locator('.order-review-item-values')).toHaveCount(2);
+  await expect(review.locator('.order-review-item-values').nth(0)).toContainText(
+    'Valor de referência: R$ 120,00',
+  );
+  await expect(review.locator('.order-review-item-values').nth(1)).toContainText(
+    'Valor de referência: R$ 26,00',
+  );
   expect(createdOrders).toBe(0);
   await review.getByRole('button', { name: 'Voltar e revisar' }).click();
   expect(createdOrders).toBe(0);
@@ -1626,13 +1695,19 @@ test('solicita exceção, recupera a aprovação e a consome em um único pedido
     .fill('Condição comercial para fechamento.');
   await requestDialog.getByRole('button', { name: 'Enviar solicitação' }).click();
   await expect(page.getByRole('button', { name: 'Aguardando aprovação' })).toBeDisabled();
-  await expect(page.locator('#order-approvals-list')).toContainText('Pendente');
+  await expect(page.locator('#order-approvals-list')).toHaveCount(0);
+  const notificationButton = page.getByRole('button', { name: /Solicitações de aprovação/ });
+  await notificationButton.click();
+  const notificationPanel = page.locator('#admin-approvals-notification-panel');
+  await expect(notificationPanel).toContainText('Pendente');
 
   approvalStatus = 'APPROVED';
   approvalVersion += 1;
-  await page.getByRole('button', { name: 'Atualizar' }).click();
+  await page.locator('#admin-approvals-notification-close').click();
+  await notificationButton.click();
+  await expect(notificationPanel).toContainText('Revisora');
+  await notificationPanel.getByRole('button', { name: 'Retomar e gerar pedido' }).click();
   await expect(page.getByRole('button', { name: 'Gerar pedido', exact: true })).toBeEnabled();
-  await expect(page.locator('#order-approvals-list')).toContainText('Revisora');
   await page.getByRole('button', { name: 'Gerar pedido', exact: true }).click();
   const review = page.getByRole('dialog', { name: 'Revisar e confirmar pedido' });
   await expect(review).toBeVisible();

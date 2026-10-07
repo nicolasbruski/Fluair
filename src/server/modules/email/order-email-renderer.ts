@@ -14,7 +14,16 @@ export interface OrderEmailRenderInput {
     reference: string | null;
     quantity: string;
     unit: string | null;
+    referenceUnitPrice: string;
     negotiatedUnitPrice: string;
+    finalUnitPrice?: string;
+    taxes?: {
+      pis: { selected: boolean; rate: string; unitAmount: string };
+      cofins: { selected: boolean; rate: string; unitAmount: string };
+      icms: { selected: boolean; rate: string; unitAmount: string };
+      ipi: { selected: boolean; rate: string; unitAmount: string };
+      totalUnitAmount: string;
+    } | null;
     subtotal: string;
   }>;
 }
@@ -90,23 +99,29 @@ export class OrderEmailRenderer {
 <td style="padding:8px;border:1px solid #d7dde5">${escapeHtml(cleanText(item.code))}</td>
 <td style="padding:8px;border:1px solid #d7dde5">${escapeHtml(cleanText(item.description))}${item.reference ? `<br><small>${escapeHtml(cleanText(item.reference))}</small>` : ''}</td>
 <td style="padding:8px;border:1px solid #d7dde5;text-align:right">${escapeHtml(formatQuantity(item.quantity))}${item.unit ? ` ${escapeHtml(cleanText(item.unit))}` : ''}</td>
+<td style="padding:8px;border:1px solid #d7dde5;text-align:right">${escapeHtml(formatMoney(item.referenceUnitPrice))}</td>
 <td style="padding:8px;border:1px solid #d7dde5;text-align:right">${escapeHtml(formatMoney(item.negotiatedUnitPrice))}</td>
+<td style="padding:8px;border:1px solid #d7dde5;text-align:right">${escapeHtml(formatMoney(item.finalUnitPrice ?? item.negotiatedUnitPrice))}</td>
 <td style="padding:8px;border:1px solid #d7dde5;text-align:right">${escapeHtml(formatMoney(item.subtotal))}</td>
 </tr>`,
       )
       .join('');
     const location = [input.customer.city, input.customer.state].filter(Boolean).join(' / ');
     const note = input.note ? cleanText(input.note) : 'Sem observacao.';
+    const summaryRow = `<tr>
+<td colspan="5" style="padding:8px;border:1px solid #d7dde5;background:#f8fafc"></td>
+<td style="padding:10px 8px;border:1px solid #d7dde5;background:#f8fafc;text-align:right;vertical-align:middle"><strong>Total de itens:</strong> ${escapeHtml(formatQuantity(input.totalQuantity))}</td>
+<td style="padding:10px 8px;border:1px solid #d7dde5;background:#f8fafc;text-align:right;vertical-align:middle"><strong>Valor Total:</strong><br><span style="font-size:18px;font-weight:700;color:#182230">${escapeHtml(formatMoney(input.totalAmount))}</span></td>
+</tr>`;
     const html = `<!doctype html><html lang="pt-BR"><body style="font-family:Arial,sans-serif;color:#182230">
 <main style="max-width:760px;margin:auto"><h1 style="font-size:22px">Pedido ${escapeHtml(input.number)}</h1>
 <p><strong>Cliente:</strong> ${escapeHtml(cleanText(input.customer.code))} - ${escapeHtml(cleanText(input.customer.name))}${location ? `<br><strong>Local:</strong> ${escapeHtml(cleanText(location))}` : ''}</p>
 <p><strong>Emissor:</strong> ${escapeHtml(cleanText(input.creator.name))} (${escapeHtml(cleanText(input.creator.email))})<br><strong>Data:</strong> ${escapeHtml(formatDateTime(input.submittedAt))}</p>
-<table style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:8px;border:1px solid #d7dde5">Codigo</th><th style="padding:8px;border:1px solid #d7dde5">Descricao</th><th style="padding:8px;border:1px solid #d7dde5">Quantidade</th><th style="padding:8px;border:1px solid #d7dde5">Preco</th><th style="padding:8px;border:1px solid #d7dde5">Subtotal</th></tr></thead><tbody>${rows}</tbody></table>
-<p><strong>Quantidade total:</strong> ${escapeHtml(formatQuantity(input.totalQuantity))}<br><strong>Total:</strong> ${escapeHtml(formatMoney(input.totalAmount))}</p>
+<table style="width:100%;border-collapse:collapse"><thead><tr><th style="padding:8px;border:1px solid #d7dde5">Codigo</th><th style="padding:8px;border:1px solid #d7dde5">Descricao</th><th style="padding:8px;border:1px solid #d7dde5">Quantidade</th><th style="padding:8px;border:1px solid #d7dde5">Valor de referência</th><th style="padding:8px;border:1px solid #d7dde5">Preço unitário</th><th style="padding:8px;border:1px solid #d7dde5">Preço com impostos</th><th style="padding:8px;border:1px solid #d7dde5">Subtotal</th></tr></thead><tbody>${rows}${summaryRow}</tbody></table>
 <p><strong>Observacao:</strong><br>${escapeHtml(note).replaceAll('\n', '<br>')}</p></main></body></html>`;
     const itemLines = input.items.map(
       (item) =>
-        `- ${cleanText(item.code)} | ${cleanText(item.description)} | ${formatQuantity(item.quantity)}${item.unit ? ` ${cleanText(item.unit)}` : ''} | ${formatMoney(item.negotiatedUnitPrice)} | ${formatMoney(item.subtotal)}`,
+        `- ${cleanText(item.code)} | ${cleanText(item.description)} | ${formatQuantity(item.quantity)}${item.unit ? ` ${cleanText(item.unit)}` : ''} | Valor de referência: ${formatMoney(item.referenceUnitPrice)} | Preço unitário: ${formatMoney(item.negotiatedUnitPrice)} | Preço com impostos: ${formatMoney(item.finalUnitPrice ?? item.negotiatedUnitPrice)} | Subtotal: ${formatMoney(item.subtotal)}`,
     );
     const text = [
       `Pedido ${input.number}`,
@@ -118,8 +133,8 @@ export class OrderEmailRenderer {
       'Itens:',
       ...itemLines,
       '',
-      `Quantidade total: ${formatQuantity(input.totalQuantity)}`,
-      `Total: ${formatMoney(input.totalAmount)}`,
+      `Total de itens: ${formatQuantity(input.totalQuantity)}`,
+      `Valor Total: ${formatMoney(input.totalAmount)}`,
       `Observacao: ${note}`,
     ].join('\n');
     return { subject, html, text };

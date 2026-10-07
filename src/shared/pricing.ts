@@ -87,6 +87,8 @@ export interface PriceListStructureItem {
   normalPrice: string | null;
   reference: string | null;
   unitPrice: string | null;
+  pisRate: string;
+  cofinsRate: string;
   ipiRate: string | null;
   ipiIncluded: boolean | null;
   icmsRate: string;
@@ -264,6 +266,10 @@ export interface CalculationDetail {
   sourceFileHash: string;
   minimumTotal: string;
   normalTotal: string;
+  pisRate: string;
+  cofinsRate: string;
+  ipiRate: string;
+  icmsRate: string;
   itemCount: number;
   missingPriceCount: number;
   origin: string;
@@ -310,8 +316,10 @@ export interface StandaloneProductCatalogItem {
   description: string;
   reference: string;
   unitPrice: string;
+  pisRate: string;
+  cofinsRate: string;
   ipiRate: string;
-  ipiIncluded: true;
+  ipiIncluded: boolean;
   icmsRate: string;
   sourceRow: number;
   image: NullableImageReference;

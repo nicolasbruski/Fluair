@@ -128,6 +128,8 @@ export class InMemoryPriceListsRepository implements PriceListsRepository {
         normalPrice: 'normalPrice' in item ? { toString: () => String(item.normalPrice) } : null,
         reference: 'reference' in item ? item.reference : null,
         unitPrice: 'unitPrice' in item ? { toString: () => String(item.unitPrice) } : null,
+        pisRate: { toString: () => String('pisRate' in item ? item.pisRate : 0) },
+        cofinsRate: { toString: () => String('cofinsRate' in item ? item.cofinsRate : 0) },
         ipiRate: 'ipiRate' in item ? { toString: () => String(item.ipiRate) } : null,
         ipiIncluded: 'ipiIncluded' in item ? item.ipiIncluded : null,
         icmsRate: { toString: () => String('icmsRate' in item ? item.icmsRate : 0) },

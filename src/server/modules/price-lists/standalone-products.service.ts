@@ -25,8 +25,10 @@ export interface StandalonePriceResolution {
   description: string;
   reference: string;
   unitPrice: Prisma.Decimal;
+  pisRate: Prisma.Decimal;
+  cofinsRate: Prisma.Decimal;
   ipiRate: Prisma.Decimal;
-  ipiIncluded: true;
+  ipiIncluded: boolean;
   icmsRate: Prisma.Decimal;
   sourceRow: number;
   image: NullableImageReference;
@@ -69,6 +71,8 @@ function catalogItem(
     description: string | null;
     reference: string | null;
     unitPrice: Prisma.Decimal | null;
+    pisRate: Prisma.Decimal;
+    cofinsRate: Prisma.Decimal;
     ipiRate: Prisma.Decimal | null;
     ipiIncluded: boolean | null;
     icmsRate: Prisma.Decimal;
@@ -77,7 +81,7 @@ function catalogItem(
   productId: string | null,
   image: NullableImageReference,
 ): StandaloneProductCatalogItem {
-  if (!item.unitPrice || !item.ipiRate || item.ipiIncluded !== true) {
+  if (!item.unitPrice || !item.ipiRate) {
     throw new AppError(
       422,
       'STANDALONE_PRODUCT_PRICE_INVALID',
@@ -90,8 +94,10 @@ function catalogItem(
     description: item.description ?? '',
     reference: item.reference ?? '',
     unitPrice: item.unitPrice.toString(),
+    pisRate: item.pisRate?.toString() ?? '0',
+    cofinsRate: item.cofinsRate?.toString() ?? '0',
     ipiRate: item.ipiRate.toString(),
-    ipiIncluded: true,
+    ipiIncluded: false,
     icmsRate: item.icmsRate.toString(),
     sourceRow: item.sourceRow,
     image,
@@ -151,6 +157,8 @@ export class StandaloneProductsService {
           description: true,
           reference: true,
           unitPrice: true,
+          pisRate: true,
+          cofinsRate: true,
           ipiRate: true,
           ipiIncluded: true,
           icmsRate: true,
@@ -214,6 +222,8 @@ export class StandaloneProductsService {
         description: true,
         reference: true,
         unitPrice: true,
+        pisRate: true,
+        cofinsRate: true,
         ipiRate: true,
         ipiIncluded: true,
         icmsRate: true,
@@ -250,8 +260,10 @@ export class StandaloneProductsService {
       description: product.description,
       reference: product.reference,
       unitPrice: new Prisma.Decimal(product.unitPrice),
+      pisRate: new Prisma.Decimal(product.pisRate),
+      cofinsRate: new Prisma.Decimal(product.cofinsRate),
       ipiRate: new Prisma.Decimal(product.ipiRate),
-      ipiIncluded: true,
+      ipiIncluded: false,
       icmsRate: new Prisma.Decimal(product.icmsRate),
       sourceRow: product.sourceRow,
       image: product.image,
@@ -275,8 +287,10 @@ export class StandaloneProductsService {
           description: resolved.description,
           reference: resolved.reference,
           unitPrice: resolved.unitPrice.toString(),
+          pisRate: resolved.pisRate.toString(),
+          cofinsRate: resolved.cofinsRate.toString(),
           ipiRate: resolved.ipiRate.toString(),
-          ipiIncluded: true,
+          ipiIncluded: resolved.ipiIncluded,
           icmsRate: resolved.icmsRate.toString(),
           sourceRow: resolved.sourceRow,
           image: resolved.image,

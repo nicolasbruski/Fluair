@@ -187,13 +187,13 @@ function structureTable(response: PriceListStructureEnvelope): string {
   if (!items.length) return '<div class="price-list-structure-state">Nenhum item encontrado.</div>';
   const kit = priceList.type === 'KIT_COMPONENT';
   const headings = kit
-    ? '<th>Linha</th><th>Código</th><th>Descrição</th><th>Preço mínimo</th><th>Preço máximo</th>'
-    : '<th>Linha</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Valor</th><th>IPI</th><th>ICMS</th>';
+    ? '<th>Linha</th><th>Código</th><th>Descrição</th><th>Preço mínimo</th><th>Preço máximo</th><th>PIS</th><th>Cofins</th><th>ICMS</th><th>IPI</th>'
+    : '<th>Linha</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Valor base</th><th>PIS</th><th>Cofins</th><th>ICMS</th><th>IPI</th>';
   const rows = items
     .map((item) =>
       kit
-        ? `<tr><td>${item.sourceRow}</td><td class="price-list-structure-code">${escapeHtml(item.code)}</td><td>${structureCell(item.description)}</td><td class="price-list-structure-number reference-price">${structureMoney(item.minimumPrice)}</td><td class="price-list-structure-number reference-price">${structureMoney(item.normalPrice)}</td></tr>`
-        : `<tr><td>${item.sourceRow}</td><td class="price-list-structure-code">${escapeHtml(item.code)}</td><td>${structureCell(item.description)}</td><td>${structureCell(item.reference)}</td><td class="price-list-structure-number">${structureMoney(item.unitPrice)}</td><td class="price-list-structure-number">${structurePercentage(item.ipiRate)}</td><td class="price-list-structure-number">${structurePercentage(item.icmsRate)}</td></tr>`,
+        ? `<tr><td>${item.sourceRow}</td><td class="price-list-structure-code">${escapeHtml(item.code)}</td><td>${structureCell(item.description)}</td><td class="price-list-structure-number reference-price">${structureMoney(item.minimumPrice)}</td><td class="price-list-structure-number reference-price">${structureMoney(item.normalPrice)}</td><td class="price-list-structure-number">${structurePercentage(item.pisRate)}</td><td class="price-list-structure-number">${structurePercentage(item.cofinsRate)}</td><td class="price-list-structure-number">${structurePercentage(item.icmsRate)}</td><td class="price-list-structure-number">${structurePercentage(item.ipiRate)}</td></tr>`
+        : `<tr><td>${item.sourceRow}</td><td class="price-list-structure-code">${escapeHtml(item.code)}</td><td>${structureCell(item.description)}</td><td>${structureCell(item.reference)}</td><td class="price-list-structure-number">${structureMoney(item.unitPrice)}</td><td class="price-list-structure-number">${structurePercentage(item.pisRate)}</td><td class="price-list-structure-number">${structurePercentage(item.cofinsRate)}</td><td class="price-list-structure-number">${structurePercentage(item.icmsRate)}</td><td class="price-list-structure-number">${structurePercentage(item.ipiRate)}</td></tr>`,
     )
     .join('');
   return `<table class="tbl price-list-structure-table"><thead><tr>${headings}</tr></thead><tbody>${rows}</tbody></table>`;

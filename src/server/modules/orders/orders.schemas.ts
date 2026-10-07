@@ -72,6 +72,22 @@ export const orderLastSalePricesSchema = z
 
 const draftMoney = z.number().finite().min(0).max(999_999_999_999);
 const draftRate = z.number().finite().min(0).max(100);
+const appliedTaxesSchema = z
+  .object({
+    pis: z.boolean(),
+    cofins: z.boolean(),
+    icms: z.boolean(),
+    ipi: z.boolean(),
+  })
+  .strict();
+const draftTaxesSchema = z
+  .object({
+    pis: z.object({ selected: z.boolean(), rate: draftRate }).strict(),
+    cofins: z.object({ selected: z.boolean(), rate: draftRate }).strict(),
+    icms: z.object({ selected: z.boolean(), rate: draftRate }).strict(),
+    ipi: z.object({ selected: z.boolean(), rate: draftRate }).strict(),
+  })
+  .strict();
 const draftImageSchema = z
   .object({
     id: z.string().uuid(),
@@ -91,7 +107,8 @@ const orderDraftCartItemSchema = z
     code: z.string().min(1).max(32),
     description: z.string().max(255),
     price: draftMoney,
-    taxRate: draftRate,
+    taxRate: draftRate.optional(),
+    taxes: draftTaxesSchema.optional(),
     referencePrice: draftMoney,
     priceEdited: z.boolean(),
     priceReference: z.enum(['MINIMUM', 'NORMAL', 'UNIT']),
@@ -99,8 +116,8 @@ const orderDraftCartItemSchema = z
     sourceVersionId: z.string().uuid(),
     priceListName: z.string().max(120).optional(),
     priceListVersion: z.number().int().positive().optional(),
-    minimumOrderQuantity: z.number().int().positive().nullable().optional(),
-    maximumOrderQuantity: z.number().int().positive().nullable().optional(),
+    minimumOrderQuantity: z.number().int().min(0).nullable().optional(),
+    maximumOrderQuantity: z.number().int().min(0).nullable().optional(),
     calculatedAt: z.string().datetime().optional(),
     minimumPrice: draftMoney.optional(),
     normalPrice: draftMoney.optional(),
@@ -111,6 +128,8 @@ const orderDraftCartItemSchema = z
             list: z.string().max(180),
             minimumPrice: draftMoney,
             maximumPrice: draftMoney,
+            pisRate: draftRate.optional().default(0),
+            cofinsRate: draftRate.optional().default(0),
             ipiRate: draftRate,
             icmsRate: draftRate,
           })
@@ -120,6 +139,8 @@ const orderDraftCartItemSchema = z
       .optional(),
     ipiRate: draftRate.optional(),
     icmsRate: draftRate.optional(),
+    pisRate: draftRate.optional(),
+    cofinsRate: draftRate.optional(),
     calculationId: z.string().uuid().optional(),
     quantity: z.number().int().min(1).max(10_000_000),
     image: draftImageSchema,
@@ -212,6 +233,7 @@ export const productQuoteLineSchema = z.object({
   priceListVersionId: z.string().uuid('Versão da lista inválida.'),
   quantity: quoteQuantity,
   negotiatedUnitPrice: negotiatedPrice.optional(),
+  appliedTaxes: appliedTaxesSchema.optional(),
 });
 export const kitQuoteLineSchema = z.object({
   kind: z.literal('KIT'),
@@ -219,6 +241,7 @@ export const kitQuoteLineSchema = z.object({
   priceReference: z.enum(['MINIMUM', 'NORMAL']),
   quantity: quoteQuantity,
   negotiatedUnitPrice: negotiatedPrice.optional(),
+  appliedTaxes: appliedTaxesSchema.optional(),
 });
 export const orderQuoteSchema = z
   .object({

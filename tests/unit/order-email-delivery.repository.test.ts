@@ -68,6 +68,7 @@ function fakePrisma(initialStatus: 'PENDING' | 'PROCESSING', expired = false) {
             referenceSnapshot: null,
             quantity: decimal('1.0000'),
             unitSnapshot: 'UN',
+            referenceUnitPrice: decimal('10.0000'),
             negotiatedUnitPrice: decimal('10.0000'),
             subtotal: decimal('10.0000'),
           },

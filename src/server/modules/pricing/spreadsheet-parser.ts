@@ -26,6 +26,11 @@ export interface KitComponentListItemInput {
   description: string;
   minimumPrice: number;
   normalPrice: number;
+  pisRate: number;
+  cofinsRate: number;
+  ipiRate: number;
+  ipiIncluded: false;
+  icmsRate: number;
   sourceRow: number;
   rawData: Array<string | number | boolean | null>;
 }
@@ -37,8 +42,10 @@ export interface StandaloneProductListItemInput {
   description: string;
   reference: string;
   unitPrice: number;
+  pisRate: number;
+  cofinsRate: number;
   ipiRate: number;
-  ipiIncluded: true;
+  ipiIncluded: false;
   icmsRate: number;
   sourceRow: number;
   rawData: Array<string | number | boolean | null>;
@@ -250,11 +257,17 @@ interface HeaderColumns {
 interface KitHeaderColumns extends HeaderColumns {
   minimumPrice: number;
   normalPrice: number;
+  pisRate: number | null;
+  cofinsRate: number | null;
+  ipiRate: number | null;
+  icmsRate: number | null;
 }
 
 interface StandaloneHeaderColumns extends HeaderColumns {
   reference: number;
   unitPrice: number;
+  pisRate: number | null;
+  cofinsRate: number | null;
   ipiRate: number;
   icmsRate: number | null;
 }
@@ -287,6 +300,17 @@ function findColumn(row: SpreadsheetRow, predicate: (value: unknown) => boolean)
   return row.findIndex(predicate);
 }
 
+function optionalTaxColumn(
+  row: SpreadsheetRow,
+  tax: 'pis' | 'cofins' | 'ipi' | 'icms',
+): number | null {
+  const column = findColumn(row, (value) => {
+    const header = compact(value);
+    return tax === 'pis' ? header === tax : header.includes(tax);
+  });
+  return column >= 0 ? column : null;
+}
+
 function findKitHeader(source: SpreadsheetRow[]): KitHeaderColumns | null {
   for (let headerRow = 0; headerRow < source.length; headerRow += 1) {
     const row = source[headerRow] ?? [];
@@ -298,7 +322,17 @@ function findKitHeader(source: SpreadsheetRow[]): KitHeaderColumns | null {
     const code = explicitCode >= 0 ? explicitCode : minimumPrice - 2;
     const description = explicitDescription >= 0 ? explicitDescription : minimumPrice - 1;
     if (code >= 0 && description >= 0)
-      return { headerRow, code, description, minimumPrice, normalPrice };
+      return {
+        headerRow,
+        code,
+        description,
+        minimumPrice,
+        normalPrice,
+        pisRate: optionalTaxColumn(row, 'pis'),
+        cofinsRate: optionalTaxColumn(row, 'cofins'),
+        ipiRate: optionalTaxColumn(row, 'ipi'),
+        icmsRate: optionalTaxColumn(row, 'icms'),
+      };
   }
   return null;
 }
@@ -313,6 +347,8 @@ function findStandaloneHeader(source: SpreadsheetRow[]): StandaloneHeaderColumns
       return header === 'referencia' || header === 'ref';
     });
     const ipiRate = findColumn(row, (value) => compact(value).includes('ipi'));
+    const pisColumn = findColumn(row, (value) => compact(value) === 'pis');
+    const cofinsColumn = findColumn(row, (value) => compact(value).includes('cofins'));
     const icmsColumn = findColumn(row, (value) => compact(value).includes('icms'));
     const unitPrice = findColumn(row, (value) => {
       const header = compact(value);
@@ -325,6 +361,8 @@ function findStandaloneHeader(source: SpreadsheetRow[]): StandaloneHeaderColumns
         description,
         reference,
         unitPrice,
+        pisRate: pisColumn >= 0 ? pisColumn : null,
+        cofinsRate: cofinsColumn >= 0 ? cofinsColumn : null,
         ipiRate,
         icmsRate: icmsColumn >= 0 ? icmsColumn : null,
       };
@@ -435,6 +473,30 @@ function validatePrice(
   return price;
 }
 
+function validateRate(
+  value: unknown,
+  row: number,
+  column: number,
+  field: string,
+  errors: SpreadsheetDiagnostic[],
+): number | null {
+  const rate = validatePrice(value, row, column, field, errors);
+  if (rate === null) return null;
+  if (rate > 100) {
+    errors.push(
+      errorDiagnostic(
+        'INVALID_TAX_RATE',
+        'A alíquota deve estar entre 0 e 100.',
+        row,
+        column,
+        field,
+      ),
+    );
+    return null;
+  }
+  return rate;
+}
+
 function throwIfInvalid(errors: SpreadsheetDiagnostic[]): void {
   if (errors.length === 0) return;
   const first = errors[0]!;
@@ -449,6 +511,7 @@ export function parseKitComponentWorkbook(
   buffer: Buffer,
 ): ParsedPriceListWorkbook<KitComponentListItemInput> {
   const source = rows(buffer);
+  const formattedSource = rows(buffer, false);
   const columns = findKitHeader(source);
   if (!columns) {
     throw new SpreadsheetError(
@@ -461,8 +524,11 @@ export function parseKitComponentWorkbook(
   const warnings: SpreadsheetDiagnostic[] = [];
   const errors: SpreadsheetDiagnostic[] = [];
   const codes = new Set<string>();
+  const expectedRates: Partial<Record<'pisRate' | 'cofinsRate' | 'ipiRate' | 'icmsRate', number>> =
+    {};
   for (let index = columns.headerRow + 1; index < source.length; index += 1) {
     const row = source[index] ?? [];
+    const formattedRow = formattedSource[index] ?? row;
     if (rowIsEmpty(row)) continue;
     const sourceRow = index + 1;
     const code = validateCode(row[columns.code], sourceRow, columns.code, codes, errors);
@@ -480,7 +546,43 @@ export function parseKitComponentWorkbook(
       'normalPrice',
       errors,
     );
-    if (code === null || minimumPrice === null || normalPrice === null) continue;
+    const rate = (
+      field: 'pisRate' | 'cofinsRate' | 'ipiRate' | 'icmsRate',
+      column: number | null,
+    ): number | null => {
+      if (column === null) return 0;
+      const parsed = validateRate(formattedRow[column], sourceRow, column, field, errors);
+      if (parsed === null) return null;
+      const expected = expectedRates[field];
+      if (expected !== undefined && expected !== parsed) {
+        errors.push(
+          errorDiagnostic(
+            'CONFLICTING_KIT_TAX_RATE',
+            'As alíquotas de uma lista com estrutura devem ser iguais em todas as linhas.',
+            sourceRow,
+            column,
+            field,
+          ),
+        );
+      } else {
+        expectedRates[field] = parsed;
+      }
+      return parsed;
+    };
+    const pisRate = rate('pisRate', columns.pisRate);
+    const cofinsRate = rate('cofinsRate', columns.cofinsRate);
+    const ipiRate = rate('ipiRate', columns.ipiRate);
+    const icmsRate = rate('icmsRate', columns.icmsRate);
+    if (
+      code === null ||
+      minimumPrice === null ||
+      normalPrice === null ||
+      pisRate === null ||
+      cofinsRate === null ||
+      ipiRate === null ||
+      icmsRate === null
+    )
+      continue;
     if (minimumPrice > normalPrice) {
       warnings.push({
         severity: 'WARNING',
@@ -496,6 +598,11 @@ export function parseKitComponentWorkbook(
       description: cleanedText(row[columns.description], 255),
       minimumPrice,
       normalPrice,
+      pisRate,
+      cofinsRate,
+      ipiRate,
+      ipiIncluded: false,
+      icmsRate,
       sourceRow,
       rawData: safeRawRow(row),
     });
@@ -541,31 +648,61 @@ export function parseStandaloneProductWorkbook(
       'unitPrice',
       errors,
     );
-    const ipiRate = validatePrice(
+    const ipiRate = validateRate(
       formattedRow[columns.ipiRate],
       sourceRow,
       columns.ipiRate,
       'ipiRate',
       errors,
     );
+    const pisRate =
+      columns.pisRate === null
+        ? 0
+        : validateRate(
+            formattedRow[columns.pisRate],
+            sourceRow,
+            columns.pisRate,
+            'pisRate',
+            errors,
+          );
+    const cofinsRate =
+      columns.cofinsRate === null
+        ? 0
+        : validateRate(
+            formattedRow[columns.cofinsRate],
+            sourceRow,
+            columns.cofinsRate,
+            'cofinsRate',
+            errors,
+          );
     const icmsRate =
       columns.icmsRate === null
         ? 0
-        : validatePrice(
+        : validateRate(
             formattedRow[columns.icmsRate],
             sourceRow,
             columns.icmsRate,
             'icmsRate',
             errors,
           );
-    if (code === null || unitPrice === null || ipiRate === null || icmsRate === null) continue;
+    if (
+      code === null ||
+      unitPrice === null ||
+      pisRate === null ||
+      cofinsRate === null ||
+      ipiRate === null ||
+      icmsRate === null
+    )
+      continue;
     items.push({
       code,
       description: cleanedText(row[columns.description], 255),
       reference: cleanedText(row[columns.reference], 120),
       unitPrice,
+      pisRate,
+      cofinsRate,
       ipiRate,
-      ipiIncluded: true,
+      ipiIncluded: false,
       icmsRate,
       sourceRow,
       rawData: safeRawRow(row),
