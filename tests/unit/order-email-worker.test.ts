@@ -40,7 +40,6 @@ function delivery(attemptCount = 1): ReservedOrderEmailDelivery {
           reference: null,
           quantity: '1.0000',
           unit: 'UN',
-          referenceUnitPrice: '10.0000',
           negotiatedUnitPrice: '10.0000',
           subtotal: '10.0000',
         },

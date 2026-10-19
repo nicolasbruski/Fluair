@@ -260,6 +260,7 @@ export interface CalculationDetail {
   current: boolean;
   kitCode: string;
   kitDescription: string;
+  reference: string | null;
   priceList: { id: string; code: string; name: string };
   priceListVersion: { id: string; version: number };
   sourceFileName: string;

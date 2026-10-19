@@ -529,7 +529,11 @@ export class OrdersService {
         ...(search
           ? {
               kit: {
-                OR: [{ code: { contains: search } }, { description: { contains: search } }],
+                OR: [
+                  { code: { contains: search } },
+                  { description: { contains: search } },
+                  { reference: { contains: search } },
+                ],
               },
             }
           : {}),
@@ -584,6 +588,7 @@ export class OrdersService {
               kit: {
                 select: {
                   code: true,
+                  reference: true,
                   currentImage: {
                     select: { id: true, width: true, height: true, createdAt: true },
                   },
@@ -666,6 +671,7 @@ export class OrdersService {
           calculationVersion: kit.version,
           code: kit.series.kit.code,
           description: kit.catalogDescription ?? kit.kitDescription,
+          reference: kit.series.kit.reference,
           minimumPrice: (kit.catalogMinimumPrice ?? kit.minimumTotal).toString(),
           normalPrice: (kit.catalogNormalPrice ?? kit.normalTotal).toString(),
           ...versionTaxStrings(kit.priceListVersion),
@@ -909,7 +915,11 @@ export class OrdersService {
               {
                 series: {
                   kit: {
-                    OR: [{ code: { contains: search } }, { description: { contains: search } }],
+                    OR: [
+                      { code: { contains: search } },
+                      { description: { contains: search } },
+                      { reference: { contains: search } },
+                    ],
                   },
                 },
               } satisfies Prisma.CalculationVersionWhereInput,
@@ -961,6 +971,7 @@ export class OrdersService {
               kit: {
                 select: {
                   code: true,
+                  reference: true,
                   currentImage: {
                     select: { id: true, width: true, height: true, createdAt: true },
                   },
@@ -1060,6 +1071,7 @@ export class OrdersService {
           calculationVersion: kit.version,
           code: kit.series.kit.code,
           description: kit.catalogDescription ?? kit.kitDescription,
+          reference: kit.series.kit.reference,
           minimumPrice: (kit.catalogMinimumPrice ?? kit.minimumTotal).toString(),
           normalPrice: (kit.catalogNormalPrice ?? kit.normalTotal).toString(),
           ...versionTaxStrings(kit.priceListVersion),
@@ -1459,6 +1471,7 @@ export class OrdersService {
                 select: {
                   id: true,
                   code: true,
+                  reference: true,
                   currentImage: {
                     select: { id: true, width: true, height: true, createdAt: true },
                   },
@@ -1635,6 +1648,7 @@ export class OrdersService {
         calculationVersion: kit.version,
         code: kit.series.kit.code,
         description: kit.catalogDescription ?? kit.kitDescription,
+        reference: kit.series.kit.reference ?? '',
         priceReference: line.priceReference,
         quantity: line.quantity,
         unitPrice: negotiatedUnitPrice.toFixed(4),
@@ -2187,7 +2201,7 @@ export class OrdersService {
         priceReference: line.kind === 'KIT' ? line.priceReference : 'UNIT',
         code: line.kind === 'KIT' ? line.code : line.productCode,
         description: line.description,
-        reference: line.kind === 'STANDALONE_PRODUCT' ? line.reference : null,
+        reference: line.reference || null,
         unit: null,
         quantity: String(line.quantity),
         referenceUnitPrice: line.referenceUnitPrice,

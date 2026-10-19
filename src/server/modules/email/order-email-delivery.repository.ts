@@ -125,7 +125,6 @@ export class PrismaOrderEmailDeliveryRepository implements OrderEmailDeliveryRep
             reference: item.referenceSnapshot,
             quantity: item.quantity.toFixed(4),
             unit: item.unitSnapshot,
-            referenceUnitPrice: item.referenceUnitPrice.toFixed(4),
             negotiatedUnitPrice: item.negotiatedUnitPrice.toFixed(4),
             finalUnitPrice: (item.finalUnitPrice ?? item.negotiatedUnitPrice).toFixed(4),
             taxes:

@@ -989,6 +989,7 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               calculationVersion: 3,
               code: 'K-200',
               description: 'Kit calculado real',
+              reference: 'KRE-200',
               minimumPrice: '100',
               normalPrice: '120',
               pisRate: '1.0000',
@@ -1077,6 +1078,7 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
               calculationVersion: 3,
               code: 'K-200',
               description: 'Kit calculado real',
+              reference: 'KRE-200',
               priceReference: 'NORMAL',
               quantity: 1,
               unitPrice: '120.0000',
@@ -1268,6 +1270,8 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await page.getByRole('button', { name: 'Adicionar mais itens' }).click();
   await expect(drawer.getByText('Kit calculado real')).toBeVisible();
   await expect(drawer.getByText('Válvula real')).toBeVisible();
+  await expect(drawer.getByText('Referência: KRE-200')).toBeVisible();
+  await expect(drawer.getByText('Referência: REF-X')).toBeVisible();
   await expect(drawer.getByText('Kit do cliente', { exact: true })).toBeVisible();
   await expect(drawer.getByText('Produto avulso', { exact: true })).toBeVisible();
   await expect(drawer.getByText('Última venda: R$ 115,00').first()).toBeVisible();
@@ -1304,6 +1308,8 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(page.locator('#pedidoItems')).toContainText('calculado em 15/08/2026');
   await expect(page.locator('#pedidoItems')).toContainText('Mínimo R$ 100,00');
   await expect(page.locator('#pedidoItems')).toContainText('Máximo R$ 120,00');
+  await expect(page.locator('#pedidoItems')).toContainText('Referência: KRE-200');
+  await expect(page.locator('#pedidoItems')).toContainText('Referência: REF-X');
   await expect(page.locator('#pedidoItems')).toContainText('último pedido R$ 115,00');
   await expect(page.locator('#pedidoItems')).toContainText('último pedido R$ 24,50');
   await expect(page.locator('#pedidoItems .order-cart-last-price').first()).toHaveAttribute(
@@ -1316,9 +1322,7 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(page.locator('#pedidoItems')).toContainText(
     'Revenda até 49 peças · Mínimo R$ 22,00 · Máximo R$ 25,50 · PIS 0% · Cofins 0% · ICMS 18% · IPI 5%',
   );
-  await expect(page.locator('#pedidoItems')).toContainText(
-    'Impostos da lista selecionada: PIS 0% · Cofins 0% · ICMS 18% · IPI 5%',
-  );
+  await expect(page.locator('#pedidoItems')).not.toContainText('Impostos da lista selecionada');
   await expect(page.locator('#pedidoItems')).not.toContainText('origem');
   await expect(page.locator('#pedidoItems .order-cart-reference-prices').first()).toHaveCSS(
     'display',
@@ -1354,13 +1358,8 @@ test('carrega o catálogo agregado e monta carrinho misto rastreável', async ({
   await expect(page.locator('#order-quote-feedback')).toContainText('Cotação validada');
   await expect(review).toHaveClass(/open/);
   await expect(review).toContainText('nicolasbruski7@gmail.com');
-  await expect(review.locator('.order-review-item-values')).toHaveCount(2);
-  await expect(review.locator('.order-review-item-values').nth(0)).toContainText(
-    'Valor de referência: R$ 120,00',
-  );
-  await expect(review.locator('.order-review-item-values').nth(1)).toContainText(
-    'Valor de referência: R$ 26,00',
-  );
+  await expect(review).toContainText('Referência: KRE-200');
+  await expect(review).toContainText('Referência: REF-X');
   expect(createdOrders).toBe(0);
   await review.getByRole('button', { name: 'Voltar e revisar' }).click();
   expect(createdOrders).toBe(0);

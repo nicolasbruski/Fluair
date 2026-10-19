@@ -464,7 +464,7 @@ describe('catálogo de pedidos com várias listas', () => {
             catalogNormalPrice: null,
             catalogScope: 'STANDARD',
             series: {
-              kit: { code: 'K-01', currentImage },
+              kit: { code: 'K-01', reference: 'KRE-0001', currentImage },
               priceList: { id: 'list-1', code: 'KIT', name: 'Kits', type: 'KIT_COMPONENT' },
             },
             priceListVersion: {
@@ -492,6 +492,7 @@ describe('catálogo de pedidos com várias listas', () => {
     expect(result.data.lines[0]).toMatchObject({
       kind: 'KIT',
       code: 'K-01',
+      reference: 'KRE-0001',
       unitPrice: '120.0000',
       finalUnitPrice: '132.0000',
       subtotal: '132.0000',

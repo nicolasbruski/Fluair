@@ -207,6 +207,7 @@ function calculationCartItem(detail: CalculationDetail): CartItem {
     kind: 'KIT',
     code: detail.kitCode,
     description: descriptionWithoutUser(detail.kitDescription),
+    reference: detail.reference,
     price: Number(detail.normalTotal),
     taxRate: Number(detail.ipiRate ?? 0),
     taxes: defaultTaxes({
@@ -571,8 +572,11 @@ function renderOrderReview(quote: OrderQuoteEnvelope['data']): void {
     meta.textContent =
       line.kind === 'KIT'
         ? `${line.priceList.name} · cálculo v${line.calculationVersion} · lista v${line.priceListVersion.version}`
-        : `${line.priceList.name} · lista v${line.priceListVersion.version}${line.reference ? ` · ref. ${line.reference}` : ''}`;
-    copy.append(title, meta);
+        : `${line.priceList.name} · lista v${line.priceListVersion.version}`;
+    const reference = document.createElement('div');
+    reference.className = 'order-review-item-meta';
+    reference.textContent = `Referência: ${line.reference || '—'}`;
+    copy.append(title, meta, reference);
     const values = document.createElement('div');
     values.className = 'order-review-item-values';
     values.textContent = `${line.quantity} × ${money(line.finalUnitPrice)} = ${money(line.subtotal)}`;
@@ -590,9 +594,6 @@ function renderOrderReview(quote: OrderQuoteEnvelope['data']): void {
         : `IPI ${percentage(line.ipiRate)} · ICMS ${percentage(line.icmsRate)}`;
       values.append(taxes);
     }
-    const reference = document.createElement('div');
-    reference.textContent = `Valor de referência: ${money(line.referenceUnitPrice)}`;
-    values.append(reference);
     row.append(copy, values);
     items.append(row);
   }
@@ -784,6 +785,7 @@ function approvalCart(detail: MyOrderPriceApprovalDetail): CartItem[] {
       kind: item.kind,
       code: item.code,
       description: item.description,
+      reference: item.reference,
       price: Number(item.negotiatedUnitPrice),
       taxRate: Number(item.ipiRate ?? 0),
       taxes: item.taxes
@@ -1571,6 +1573,9 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
   const description = document.createElement('div');
   description.className = 'item-desc';
   description.textContent = descriptionWithoutUser(item.description);
+  const reference = document.createElement('div');
+  reference.className = 'order-item-reference';
+  reference.textContent = item.reference ? `Referência: ${item.reference}` : 'Referência: —';
   const source = document.createElement('div');
   source.className = 'order-source';
   const lastSale = document.createElement('div');
@@ -1615,6 +1620,7 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       kind: item.kind,
       code: item.code,
       description: descriptionWithoutUser(item.description),
+      reference: item.reference,
       price: Number(range?.maximumPrice ?? item.unitPrice),
       taxRate: Number(range?.ipiRate ?? item.ipiRate ?? 0),
       taxes: defaultTaxes({
@@ -1678,6 +1684,7 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       kind: item.kind,
       code: item.code,
       description: descriptionWithoutUser(item.description),
+      reference: item.reference,
       price: Number(item.normalPrice),
       taxRate: Number(item.ipiRate ?? 0),
       taxes: defaultTaxes({
@@ -1703,7 +1710,7 @@ function catalogCard(item: CatalogItem, canAdd = true): HTMLDivElement {
       image: item.image ?? null,
     };
   }
-  card.append(photo, badge, code, description);
+  card.append(photo, badge, code, description, reference);
   const hint = document.createElement('div');
   hint.className = 'order-card-hint';
   hint.textContent =
@@ -1743,9 +1750,7 @@ function renderDrawerCatalog(): void {
   const search = normalizedText(element<HTMLInputElement>('#order-drawer-search').value.trim());
   const items = visibleCatalogItems.filter((item) => {
     const matchesFilter = drawerFilter === 'ALL' || drawerCategory(item) === drawerFilter;
-    const haystack = normalizedText(
-      `${item.code} ${item.description} ${item.kind === 'STANDALONE_PRODUCT' ? item.reference : ''}`,
-    );
+    const haystack = normalizedText(`${item.code} ${item.description} ${item.reference ?? ''}`);
     return matchesFilter && (!search || haystack.includes(search));
   });
   clear(container);
@@ -1912,6 +1917,9 @@ function renderCart(): void {
     const description = document.createElement('div');
     description.className = 'order-cart-desc';
     description.textContent = `${item.code} · ${descriptionWithoutUser(item.description)}`;
+    const reference = document.createElement('div');
+    reference.className = 'order-item-reference';
+    reference.textContent = item.reference ? `Referência: ${item.reference}` : 'Referência: —';
     const source = document.createElement('div');
     source.className = 'order-source';
     source.append(
@@ -1969,12 +1977,6 @@ function renderCart(): void {
       exception.className = 'order-cart-exception';
       exception.textContent = `Exceção de preço: mínimo ${money(violation.minimumUnitPrice)}, solicitado ${money(violation.negotiatedUnitPrice)}, diferença total ${money(violation.totalDifference)} (${percentage(violation.differencePercentage)}).`;
       source.append(exception);
-    }
-    if (item.ipiRate !== undefined && item.icmsRate !== undefined) {
-      const tax = document.createElement('span');
-      tax.className = 'order-cart-tax';
-      tax.textContent = `Impostos da lista selecionada: PIS ${percentage(item.pisRate ?? 0)} · Cofins ${percentage(item.cofinsRate ?? 0)} · ICMS ${percentage(item.icmsRate)} · IPI ${percentage(item.ipiRate)}`;
-      source.append(tax);
     }
     const controls = document.createElement('div');
     controls.className = 'order-cart-controls';
@@ -2070,7 +2072,7 @@ function renderCart(): void {
     controls.append(quantityField, priceField);
     controls.append(taxField);
     controls.append(subtotal);
-    itemCopy.append(description, source);
+    itemCopy.append(description, reference, source);
     itemSummary.append(itemCopy);
     row.append(top, itemSummary, controls);
     container.append(row);
@@ -2122,6 +2124,7 @@ async function reviewOrder(): Promise<void> {
       const item = cart[index];
       if (!item) return;
       item.referencePrice = Number(quoted.referenceUnitPrice ?? quoted.unitPrice);
+      item.reference = quoted.reference;
       item.price = Number(quoted.negotiatedUnitPrice ?? quoted.unitPrice);
       item.priceEdited = Math.abs(item.price - item.referencePrice) > 0.0001;
       item.sourceVersionId = quoted.priceListVersion.id;

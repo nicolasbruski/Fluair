@@ -163,6 +163,7 @@ export interface OrderDraftCartItem {
   kind: 'KIT' | 'STANDALONE_PRODUCT';
   code: string;
   description: string;
+  reference?: string | null | undefined;
   price: number;
   /** @deprecated Compatibility with drafts saved before per-tax selection. */
   taxRate?: number | undefined;
@@ -355,6 +356,7 @@ export type OrderQuoteLine =
       calculationVersion: number;
       code: string;
       description: string;
+      reference: string;
       priceReference: 'MINIMUM' | 'NORMAL';
       quantity: number;
       unitPrice: string;

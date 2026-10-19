@@ -106,6 +106,7 @@ const orderDraftCartItemSchema = z
     kind: z.enum(['KIT', 'STANDALONE_PRODUCT']),
     code: z.string().min(1).max(32),
     description: z.string().max(255),
+    reference: z.string().max(120).nullable().optional(),
     price: draftMoney,
     taxRate: draftRate.optional(),
     taxes: draftTaxesSchema.optional(),

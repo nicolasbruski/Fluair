@@ -65,10 +65,9 @@ function fakePrisma(initialStatus: 'PENDING' | 'PROCESSING', expired = false) {
           {
             codeSnapshot: 'P-1',
             descriptionSnapshot: 'Produto',
-            referenceSnapshot: null,
+            referenceSnapshot: 'VRE-9932',
             quantity: decimal('1.0000'),
             unitSnapshot: 'UN',
-            referenceUnitPrice: decimal('10.0000'),
             negotiatedUnitPrice: decimal('10.0000'),
             subtotal: decimal('10.0000'),
           },
@@ -99,6 +98,7 @@ describe('PrismaOrderEmailDeliveryRepository', () => {
     ]);
 
     expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.find(Boolean)?.order.items[0]?.reference).toBe('VRE-9932');
     expect(fake.state.status).toBe('PROCESSING');
     expect(fake.state.attemptCount).toBe(1);
   });

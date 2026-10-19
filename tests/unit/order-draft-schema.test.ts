@@ -12,6 +12,7 @@ describe('schema do pedido em andamento', () => {
           kind: 'STANDALONE_PRODUCT',
           code: 'P-01',
           description: 'Produto da faixa inicial',
+          reference: 'VRE-0090',
           price: 10,
           referencePrice: 10,
           priceEdited: false,
@@ -27,5 +28,6 @@ describe('schema do pedido em andamento', () => {
     });
 
     expect(result.success).toBe(true);
+    if (result.success) expect(result.data.cart[0]?.reference).toBe('VRE-0090');
   });
 });

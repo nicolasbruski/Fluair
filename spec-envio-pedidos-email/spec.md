@@ -143,7 +143,7 @@ A confirmação deve exibir, sem campos editáveis:
 - usuário emissor: nome e e-mail;
 - destinatários efetivos, já normalizados e sem duplicidade;
 - itens com código, descrição, origem/lista, quantidade e preço unitário negociado;
-- valor de referência identificado em todos os itens, mesmo quando igual ao preço negociado;
+- código de referência comercial do item, como `VRE-9932`;
 - IPI e ICMS informativos para produtos avulsos;
 - subtotal por linha;
 - quantidade total;

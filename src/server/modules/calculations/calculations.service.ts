@@ -308,6 +308,7 @@ export class CalculationsService {
           current: calculation.current,
           kitCode: calculation.series.kit.code,
           kitDescription: calculation.kitDescription,
+          reference: calculation.series.kit.reference,
           priceList: {
             id: calculation.series.priceList.id,
             code: calculation.series.priceList.code,

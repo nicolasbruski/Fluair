@@ -104,9 +104,9 @@ envia `calculationId` e a referência mínima ou máxima.
 ## Confirmação, registro e envio
 
 **Gerar pedido** apenas solicita uma cotação atual e abre a revisão. Ela mostra cliente, emissor,
-destinatários, origens e versões, quantidades, valores de referência em todos os itens, preços
-negociados, impostos,
-subtotais, total, observação e avisos. Fechar, pressionar `Esc` ou voltar não cria registros.
+destinatários, origens e versões, quantidades, códigos de referência dos itens, preços negociados,
+impostos, subtotais, total, observação e avisos. Fechar, pressionar `Esc` ou voltar não cria
+registros.
 
 **Confirmar e enviar pedido** revalida as fontes e exige uma chave idempotente. A mesma tentativa e
 o mesmo conteúdo recuperam o pedido existente; reutilizar a chave com outro conteúdo é conflito.
@@ -141,11 +141,10 @@ Falha do provedor nunca desfaz o pedido. O criador
 pode consultar seu snapshot e os estados de entrega; administradores podem consultar qualquer
 pedido. `ACCEPTED` significa somente aceitação pelo provedor, pois o webhook foi adiado.
 
-No corpo HTML e na versão em texto do e-mail, cada item informa separadamente o **Valor de
-referência**, o **Preço unitário** negociado e o **Preço com impostos**. O valor de referência
-aparece mesmo quando é igual ao negociado. No HTML, **Total de itens** e **Valor Total** ocupam a
-última linha da tabela de itens, nas duas colunas mais à direita. O valor monetário usa tipografia
-maior e em negrito para se destacar do restante do resumo.
+No corpo HTML e na versão em texto do e-mail, cada item informa separadamente a **Referência**
+comercial, como `VRE-9932`, o **Preço unitário** negociado e o **Preço com impostos**. No HTML,
+**Total de itens** e **Valor Total** ocupam a última linha da tabela de itens, nas duas colunas mais à
+direita. O valor monetário usa tipografia maior e em negrito para se destacar do restante do resumo.
 
 Cada item grava separadamente o preço de referência e o preço unitário negociado. O último valor
 vendido é consultado a partir desse snapshot imutável; não é copiado para produto, kit ou cálculo.
