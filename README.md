@@ -222,6 +222,9 @@ Express. O MySQL real é validado pela migração e pode ser usado no smoke test
 
 ## Produção
 
+Para publicar na Hostinger Cloud pelo GitHub, siga o roteiro em
+[`docs/deploy-hostinger.md`](docs/deploy-hostinger.md).
+
 Configure as variáveis de `.env.example`, use HTTPS e execute:
 
 ```text

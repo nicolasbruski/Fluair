@@ -23,13 +23,16 @@ async function main(): Promise<void> {
   if (!role) throw new Error('Papel Administrador ausente. Execute `npm run db:seed` primeiro.');
 
   const passwordHash = await passwordService.hash(input.ADMIN_PASSWORD);
-  const user = await prisma.$transaction(
+  const result = await prisma.$transaction(
     async (transaction) => {
       const activeAdministrator = await transaction.user.findFirst({
         where: { roleId: role.id, active: true },
-        select: { id: true },
+        select: { id: true, name: true, email: true },
       });
       if (activeAdministrator) {
+        if (activeAdministrator.email === email) {
+          return { user: activeAdministrator, created: false } as const;
+        }
         throw new Error('Já existe um administrador ativo. O bootstrap só cria a primeira conta.');
       }
       const existing = await transaction.user.findUnique({
@@ -50,11 +53,15 @@ async function main(): Promise<void> {
           requestId: 'bootstrap-admin',
         },
       });
-      return created;
+      return { user: created, created: true } as const;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
-  console.info(`Administrador criado: ${user.name} <${user.email}>`);
+  console.info(
+    result.created
+      ? `Administrador criado: ${result.user.name} <${result.user.email}>`
+      : `Administrador já configurado: ${result.user.name} <${result.user.email}>`,
+  );
 }
 
 main()

@@ -82,7 +82,7 @@ async function start(): Promise<void> {
     logger.info({ port: config.PORT }, 'Servidor Fluair iniciado.');
   });
   let emailWorker: OrderEmailWorker | null = null;
-  if (config.EMAIL_DELIVERY_ENABLED && config.EMAIL_API_KEY) {
+  if (config.EMAIL_DELIVERY_ENABLED && config.EMAIL_WORKER_ENABLED && config.EMAIL_API_KEY) {
     let emailProvider: EmailProvider = new ResendEmailProvider(config.EMAIL_API_KEY);
     if (config.NODE_ENV !== 'production' && config.EMAIL_ALLOWLIST) {
       emailProvider = new AllowlistEmailProvider(config.EMAIL_ALLOWLIST, emailProvider);
@@ -98,8 +98,10 @@ async function start(): Promise<void> {
     );
     emailWorker.start();
     logger.info({ provider: config.EMAIL_PROVIDER }, 'Worker de e-mail iniciado.');
-  } else {
+  } else if (!config.EMAIL_DELIVERY_ENABLED) {
     logger.info('Entrega de e-mail desabilitada; pedidos permanecerao pendentes.');
+  } else {
+    logger.info('Worker continuo de e-mail desabilitado; a fila deve ser processada por cron.');
   }
 
   let shuttingDown = false;

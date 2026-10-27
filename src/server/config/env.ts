@@ -22,6 +22,10 @@ const environmentSchema = z
       .enum(['true', 'false'])
       .default('false')
       .transform((value) => value === 'true'),
+    EMAIL_WORKER_ENABLED: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
     EMAIL_API_KEY: z.string().trim().min(1).optional(),
     EMAIL_ALLOWLIST: z.string().trim().optional(),
     EMAIL_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(10_000),
@@ -82,6 +86,7 @@ export type AppConfig = Omit<
   | 'EMAIL_REPLY_TO'
   | 'EMAIL_PROVIDER'
   | 'EMAIL_DELIVERY_ENABLED'
+  | 'EMAIL_WORKER_ENABLED'
   | 'EMAIL_API_KEY'
   | 'EMAIL_ALLOWLIST'
   | 'EMAIL_POLL_INTERVAL_MS'
@@ -96,6 +101,7 @@ export type AppConfig = Omit<
       | 'EMAIL_REPLY_TO'
       | 'EMAIL_PROVIDER'
       | 'EMAIL_DELIVERY_ENABLED'
+      | 'EMAIL_WORKER_ENABLED'
       | 'EMAIL_API_KEY'
       | 'EMAIL_ALLOWLIST'
       | 'EMAIL_POLL_INTERVAL_MS'

@@ -12,6 +12,21 @@ const base = {
 describe('configuracao de entrega de e-mail', () => {
   it('mantem entrega real desabilitada por padrao', () => {
     expect(parseEnvironment(base).EMAIL_DELIVERY_ENABLED).toBe(false);
+    expect(parseEnvironment(base).EMAIL_WORKER_ENABLED).toBe(true);
+  });
+
+  it('permite desabilitar somente o worker continuo para processamento por cron', () => {
+    const config = parseEnvironment({
+      ...base,
+      NODE_ENV: 'production',
+      EMAIL_DELIVERY_ENABLED: 'true',
+      EMAIL_WORKER_ENABLED: 'false',
+      EMAIL_API_KEY: 're_test',
+      EMAIL_FROM: 'pedidos@example.com',
+    });
+
+    expect(config.EMAIL_DELIVERY_ENABLED).toBe(true);
+    expect(config.EMAIL_WORKER_ENABLED).toBe(false);
   });
 
   it('falha cedo se a entrega habilitada estiver incompleta', () => {

@@ -11,6 +11,8 @@
     "dev:server": "tsx watch src/server/server.ts",
     "dev:web": "vite",
     "build": "npm run clean:server && npm run db:generate && npm run typecheck && vite build && tsc -p tsconfig.server.json",
+    "deploy:hostinger": "npm run build && npm run db:migrate",
+    "setup:hostinger": "npm run deploy:hostinger && npm run db:seed && npm run db:bootstrap-admin",
     "clean:server": "node -e \"require('node:fs').rmSync('dist/src',{recursive:true,force:true})\"",
     "start": "node dist/src/server/server.js",
     "lint": "eslint .",
@@ -25,10 +27,11 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:bootstrap-admin": "tsx src/server/scripts/bootstrap-admin.ts"
+    "db:bootstrap-admin": "tsx src/server/scripts/bootstrap-admin.ts",
+    "email:process": "node dist/src/server/scripts/process-order-emails.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.16.3",
+    "@prisma/client": "6.16.3",
     "argon2": "^0.44.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.6.1",
@@ -54,7 +57,7 @@
     "eslint": "^9.36.0",
     "globals": "^16.4.0",
     "prettier": "^3.6.2",
-    "prisma": "^6.16.3",
+    "prisma": "6.16.3",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
