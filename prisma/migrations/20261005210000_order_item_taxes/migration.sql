@@ -1,7 +1,7 @@
 -- Tax rates belong to the immutable price-list version. Order and approval
 -- rows snapshot both the selection and the calculated amounts.
 ALTER TABLE `price_list_items`
-  DROP CHECK `price_list_items_price_shape_check`;
+  DROP CONSTRAINT `price_list_items_price_shape_check`;
 
 ALTER TABLE `price_list_items`
   ADD COLUMN `pis_rate` DECIMAL(7, 4) NOT NULL DEFAULT 0.0000,

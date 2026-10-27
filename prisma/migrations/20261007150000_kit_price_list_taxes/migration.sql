@@ -1,7 +1,7 @@
 -- Structured-list taxes are stored on every immutable component row. The
 -- importer guarantees that all rows in one version use the same rates.
 ALTER TABLE `price_list_items`
-  DROP CHECK `price_list_items_price_shape_check`;
+  DROP CONSTRAINT `price_list_items_price_shape_check`;
 
 UPDATE `price_list_items`
 SET `ipi_rate` = 0.0000,
