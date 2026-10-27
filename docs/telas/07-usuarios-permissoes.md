@@ -109,6 +109,11 @@ Uma exclusão definitiva só deve existir para contas criadas por engano e ainda
 - Usuários com apenas `user.view` consultam a lista, sem formulário ou botões administrativos.
 - Criação, edição, ativação e desativação são registradas em `audit_logs`.
 - Atualizar a página recarrega o estado persistido.
+- Em telas compactas, cada usuário é apresentado como cartão com avatar, identificação, estado,
+  resumo de permissões, perfil rotulado e ações em alvos de 44 px. Nomes e e-mails longos quebram
+  sem ampliar a página.
+- A matriz de permissões por perfil passa a cartões rotulados no layout compacto. Os modais de edição
+  e estado mantêm o foco, fecham com `Escape` e devolvem o foco à ação de origem.
 
 ## Estados e validações
 

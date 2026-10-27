@@ -1,0 +1,622 @@
+/*
+ * Pedidos e aprovações
+ *
+ * 900 px: filtros administrativos e composição densa começam a quebrar.
+ * 700 px: pedido, drawer, carrinho e revisão passam à composição móvel.
+ * 480 px: ações e fatos usam uma coluna, preservando alvos de toque.
+ */
+
+#s-pedido,
+#s-pedido .orders-shell,
+#s-pedido .pedido-panel,
+#s-aprovacoes,
+.approval-list-card,
+.approval-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#s-pedido :where(.order-cart-desc, .order-source, .order-item-reference, .order-card-last-price),
+#s-aprovacoes :where(strong, small, td, dd),
+.approval-notifications-panel :where(strong, small, span) {
+  overflow-wrap: anywhere;
+}
+
+/* A fila é uma região horizontal local, com indicação nas bordas. */
+.order-draft-history {
+  isolation: isolate;
+}
+
+.order-draft-history::before,
+.order-draft-history::after {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  content: '';
+  pointer-events: none;
+}
+
+.order-draft-history::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--surface), transparent);
+}
+
+.order-draft-history::after {
+  right: 0;
+  background: linear-gradient(270deg, var(--surface), transparent);
+}
+
+.order-draft-tabs {
+  padding-inline: 4px;
+  scroll-padding-inline: 18px;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.order-draft-tab,
+.order-draft-tab-discard {
+  min-height: 44px;
+}
+
+.order-draft-tab-discard {
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 44px;
+  transform: none;
+}
+
+.order-draft-tab {
+  padding-right: 42px;
+}
+
+/* Drawer: largura fluida, viewport dinâmica e áreas seguras. */
+#order-drawer {
+  width: min(660px, 100vw);
+  max-width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  overscroll-behavior: contain;
+}
+
+#order-drawer .drawer-header {
+  padding-top: max(16px, env(safe-area-inset-top));
+}
+
+#order-drawer .drawer-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#order-drawer .drawer-close {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+}
+
+.order-drawer-list,
+.order-drawer-list .item-card,
+.order-drawer-list .item-card > :not(.media-image) {
+  min-width: 0;
+}
+
+.order-drawer-list .item-card :where(.item-desc, .item-cod, .order-item-reference, .order-source) {
+  overflow-wrap: anywhere;
+}
+
+.order-card-actions .btn,
+.order-card-price-range,
+.order-pagination .btn,
+.order-drawer-filters .filter-chip {
+  min-height: 44px;
+}
+
+/* Carrinho: cada bloco pode encolher sem empurrar o documento. */
+.order-cart-row,
+.order-cart-summary,
+.order-cart-summary__copy,
+.order-cart-controls,
+.order-cart-field,
+.order-cart-tax-field,
+.order-cart-subtotal {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#s-pedido .order-cart-subtotal {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#s-pedido .order-cart-tax-options {
+  min-height: 44px;
+  height: auto;
+  padding-block: 7px;
+}
+
+#s-pedido .order-cart-tax-option {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+#s-pedido .order-cart-tax-option input {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+}
+
+.order-cart-top .btn,
+.order-more .btn,
+#order-review,
+.cliente-select-trigger,
+.cliente-select-clear {
+  min-height: 44px;
+}
+
+.cliente-select-clear {
+  width: 44px;
+  height: 44px;
+  right: 38px;
+}
+
+.pedido-client-picker.has-selection .cliente-select-trigger {
+  padding-right: 88px;
+}
+
+.order-review-dialog,
+.order-approval-dialog,
+.approval-detail-modal,
+.approval-decision-modal {
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+
+.order-review-body,
+.order-approval-body,
+.approval-detail-content,
+.approval-decision-modal form {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.order-review-dialog > .modal-header,
+.order-review-dialog > .modal-footer,
+.order-approval-dialog > .modal-header,
+.order-approval-dialog > .modal-footer,
+.approval-detail-modal > .modal-header,
+.approval-detail-modal > .modal-footer {
+  flex-shrink: 0;
+}
+
+.order-review-total,
+.pp-grand,
+.pp-total-row {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.order-review-total > :last-child,
+.pp-grand-val,
+.pp-total-val {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* Aprovações e notificações. */
+.approval-table-wrap {
+  overscroll-behavior-inline: contain;
+}
+
+.approval-filter-actions > .btn,
+.customers-pagination > .btn,
+.approval-table .btn,
+.approval-notification-actions > .btn,
+.approval-notification-detail,
+.approval-notifications-all {
+  min-height: 44px;
+}
+
+.approval-notifications-panel {
+  display: flex;
+  max-height: calc(100vh - 84px);
+  max-height: calc(100dvh - 84px);
+  flex-direction: column;
+}
+
+.approval-notifications-header,
+.approval-notifications-all {
+  flex-shrink: 0;
+}
+
+.approval-notifications-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.approval-notification-item-head,
+.approval-notification-summary,
+.approval-detail-summary,
+.approval-item-header {
+  min-width: 0;
+}
+
+.approval-notification-item-head > :first-child,
+.approval-notification-summary > :first-child,
+.approval-detail-summary > :first-child,
+.approval-item-header > :first-child {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .approval-filter-actions {
+    justify-content: stretch;
+  }
+
+  .approval-filter-actions > .btn {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .approval-detail-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .approval-notifications-panel {
+    position: fixed;
+    top: max(66px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: auto;
+    width: min(390px, calc(100vw - 16px));
+    max-height: calc(100vh - 78px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 78px - env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 700px) {
+  #s-pedido .orders-shell {
+    width: 100%;
+  }
+
+  #s-pedido .order-step {
+    padding: 14px 12px;
+    margin-bottom: 12px;
+  }
+
+  #s-pedido .order-step-head,
+  #s-pedido .order-approvals-head {
+    align-items: stretch;
+  }
+
+  #s-pedido .order-step-head .btn,
+  #s-pedido .order-approvals-head .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cliente-select-label,
+  .cliente-select-meta {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .cliente-dropdown {
+    right: 0;
+    left: 0;
+    max-height: min(62vh, 430px);
+    max-height: min(62dvh, 430px);
+    padding: 10px;
+    overflow-y: auto;
+  }
+
+  .cliente-option-code {
+    width: 72px;
+    flex-basis: 72px;
+  }
+
+  .pp-header,
+  .order-cart-row,
+  .obs-wrap,
+  .pp-footer {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .order-cart-top {
+    align-items: center;
+  }
+
+  .order-cart-summary {
+    align-items: flex-start;
+  }
+
+  .order-cart-controls,
+  .order-cart-controls.has-tax {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-cart-tax-options {
+    display: grid;
+    width: 100%;
+    height: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 8px;
+  }
+
+  .order-cart-subtotal {
+    padding: 8px 0 0;
+    text-align: left;
+  }
+
+  #order-drawer .drawer-header,
+  #order-drawer .drawer-search,
+  #order-drawer .order-drawer-filters,
+  #order-drawer .order-drawer-meta,
+  #order-drawer .order-pagination {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  #order-drawer .drawer-header {
+    padding-bottom: 12px;
+  }
+
+  #order-drawer .drawer-search {
+    padding-block: 10px;
+  }
+
+  .order-drawer-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .order-drawer-filters .filter-chip {
+    flex: 0 0 auto;
+  }
+
+  #s-pedido .order-drawer-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-bottom: 8px;
+  }
+
+  .order-drawer-list {
+    padding: 4px 12px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .order-drawer-list .item-card {
+    grid-template-columns: 80px minmax(0, 1fr);
+    column-gap: 10px;
+    padding: 12px;
+  }
+
+  .order-drawer-list .item-card > .media-image {
+    width: 80px !important;
+    height: 60px !important;
+  }
+
+  .order-card-actions {
+    grid-column: 1 / -1 !important;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-card-actions .btn {
+    width: 100%;
+  }
+
+  .order-pagination {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .order-review-dialog,
+  .order-approval-dialog,
+  .approval-detail-modal,
+  .approval-decision-modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .order-review-summary,
+  .order-review-item,
+  .approval-detail-facts,
+  .approval-item-data {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-review-item-values {
+    text-align: left;
+  }
+
+  .order-review-total {
+    flex-direction: column;
+  }
+
+  .order-review-total > :last-child,
+  .pp-grand-val,
+  .pp-total-val {
+    text-align: left;
+  }
+
+  .order-approval-card-head,
+  .approval-detail-summary,
+  .approval-item-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .approval-page-heading h1 {
+    font-size: 20px;
+  }
+
+  .approval-filters {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .approval-filter-actions {
+    grid-column: auto;
+  }
+
+  .approval-table-wrap {
+    overflow-x: hidden;
+  }
+
+  .approval-table,
+  .approval-table tbody {
+    width: 100%;
+  }
+
+  .approval-table tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .approval-table td {
+    min-width: 0;
+  }
+
+  .approval-table td:first-child,
+  .approval-table td:nth-child(2),
+  .approval-table td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .approval-table td:last-child .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .customers-pagination {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-inline: 12px;
+  }
+
+  .customers-pagination > span {
+    flex: 1 1 100%;
+    order: -1;
+    text-align: center;
+  }
+
+  .customers-pagination > .btn {
+    flex: 1 1 120px;
+    justify-content: center;
+  }
+
+  .approval-notifications-panel {
+    top: max(66px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+    left: max(8px, env(safe-area-inset-left));
+    width: auto;
+    max-height: calc(100vh - 78px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 78px - env(safe-area-inset-bottom));
+  }
+
+  .approval-notification-summary,
+  .approval-notification-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .approval-notification-actions > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .order-cart-summary {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .order-cart-summary .media-image {
+    width: 64px !important;
+    height: 48px !important;
+  }
+
+  .order-drawer-list .item-card {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .order-drawer-list .item-card > .media-image {
+    width: 64px !important;
+    height: 48px !important;
+  }
+
+  .order-card-prices.ranges {
+    grid-column: 1 / -1 !important;
+    width: 100%;
+  }
+
+  .order-card-price-range {
+    width: 100%;
+  }
+
+  .order-pagination {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-pagination > span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    text-align: center;
+  }
+
+  .approval-table tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .approval-table td,
+  .approval-table td:first-child,
+  .approval-table td:nth-child(2),
+  .approval-table td:last-child {
+    grid-column: 1;
+  }
+
+  .approval-detail-modal .modal-footer > .btn,
+  .order-review-dialog .modal-footer > .btn,
+  .order-approval-dialog .modal-footer > .btn {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
+
+@media (max-height: 520px) {
+  #order-drawer .drawer-header {
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: 8px;
+  }
+
+  #order-drawer .drawer-search {
+    padding-block: 7px;
+  }
+
+  #order-drawer .order-drawer-filters {
+    padding-block: 5px;
+  }
+
+  #order-drawer .order-drawer-meta {
+    padding-bottom: 5px;
+  }
+
+  .order-review-dialog,
+  .order-approval-dialog,
+  .approval-detail-modal,
+  .approval-decision-modal {
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+}

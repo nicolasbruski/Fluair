@@ -73,3 +73,16 @@ completos.
 - aprovação e reprovação ficam visíveis ao solicitante;
 - a aprovação exige nova cotação e só libera usuário, cliente e conteúdo exatos;
 - a interface funciona por teclado e em resolução móvel, com mensagens em `aria-live`.
+
+## Comportamento responsivo
+
+- Os filtros passam de cinco colunas para duas e, abaixo de 700 px, para uma coluna. Limpar e filtrar
+  permanecem com alvos de toque de 44 px.
+- A fila mantém a tabela com rolagem interna em larguras intermediárias e a converte em cartões
+  rotulados nas telas compactas, preservando cliente, solicitante, datas, valores, estado e ação.
+- Detalhe e decisão limitam sua altura pela viewport dinâmica. Itens e justificativa rolam dentro do
+  corpo, enquanto fechar, aprovar e reprovar permanecem alcançáveis no rodapé.
+- Em navegação móvel, o painel do sino é fixado à viewport, respeita áreas seguras e possui rolagem
+  interna própria; assim, não herda o deslocamento do menu nem fica coberto pelo cabeçalho.
+- A matriz automatizada cobre fila, notificação, detalhe, aprovação/reprovação, textos longos e valores
+  grandes em `tests/e2e/task-006-responsiveness.spec.ts`.

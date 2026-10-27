@@ -146,6 +146,9 @@ Retorno conceitual de sucesso:
 - Campos inicialmente vazios, validação acessível, bloqueio de envio duplicado e mensagens para
   credenciais inválidas, conta desativada, excesso de tentativas, sessão expirada e indisponibilidade.
 - A marca textual provisória foi substituída pela logo oficial da Fluair no topo do card de login.
+- O card, os campos, as mensagens e a ação principal se reorganizam sem overflow em 320 px e em
+  baixa altura. Campos e botão principal possuem alvos de pelo menos 44 px, e a viewport dinâmica
+  permite alcançar a ação com teclado virtual ou orientação horizontal.
 
 O arquivo `fluair-tabpreco-merge-pedidos.html` permanece intacto. O Vite o usa como fonte no build,
 substitui apenas Login e navegação compartilhada, e preserva as telas ainda não migradas com seus

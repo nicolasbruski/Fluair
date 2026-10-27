@@ -30,3 +30,15 @@ avulsas no Pedido.
 
 Cada versão preserva arquivo, hash, lista, versão da lista, composição, totais e responsável. O
 vínculo fotografa cliente e classe. Alterações posteriores não reescrevem cálculos salvos.
+
+## Comportamento responsivo
+
+- Até 760 px, a configuração lateral passa para cima da prévia, preservando a ordem de leitura e
+  foco: folha, foto, cliente, lista, calcular e resultado.
+- A seleção de cliente usa cartões em telas compactas. Código, razão social, segmento, classe e
+  responsável quebram dentro do modal e continuam acessíveis em 320 px.
+- Totais usam uma coluna em celular compacto; valores longos quebram sem ampliar o documento.
+- A composição mantém código, descrição, quantidade, unidade e preços numa região de rolagem
+  horizontal interna, focável e rotulada.
+- Os modais de clientes, listas e salvamento limitam a altura pela viewport dinâmica. Cabeçalho e
+  rodapé permanecem fora da região interna rolável, inclusive em 667 × 375.

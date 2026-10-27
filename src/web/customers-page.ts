@@ -427,6 +427,9 @@ function renderCalculationLink(link: CustomerCalculationLink): HTMLElement {
   summary.append(heading, meta);
   const content = document.createElement('div');
   content.className = 'customer-calculation-content';
+  content.tabIndex = 0;
+  content.setAttribute('role', 'region');
+  content.setAttribute('aria-label', `Itens do cálculo ${link.kitCode}`);
   const table = document.createElement('table');
   table.className = 'customer-calculation-items';
   const head = table.createTHead().insertRow();

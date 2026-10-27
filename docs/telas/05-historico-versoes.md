@@ -126,6 +126,15 @@ Durante a migração, ambas devem compartilhar a mesma fonte e regra. A recomend
 - A versão atual é identificada sem apagar as anteriores.
 - Modal e tela completa, se ambos existirem, mostram os mesmos dados.
 
+## Comportamento responsivo do modal
+
+- O modal usa a altura dinâmica disponível; título, fechamento e rodapé permanecem alcançáveis e
+  somente a lista de versões rola verticalmente.
+- Cada versão reorganiza foto, metadados e ações em grade. Em celular compacto, as ações ocupam
+  linhas completas e mantêm área mínima de toque.
+- Textos longos de lista, responsável e último pedido quebram dentro do item; foto ausente conserva a
+  caixa de mídia e não altera a largura do modal.
+
 ## Decisões pendentes
 
 - Necessidade da comparação detalhada item a item na primeira versão.

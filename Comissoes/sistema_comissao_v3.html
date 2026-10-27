@@ -631,6 +631,70 @@ td.val-green{color:var(--green);font-weight:700}
   .badge{font-size:8px;padding:2px 6px}
 }
 
+/* ── RESPONSIVE V2: composição legível, sem comprimir dados essenciais ── */
+*{box-sizing:border-box}
+.page,.panel,.card,.toolbar,.tbl-wrap,.modal,.preview-modal,.drop-box{min-width:0;max-width:100%}
+.btn,.btn-file,.nav-tab,.nav-action,.f-pill,.seg-btn,.modal-close,.drop-close{min-height:44px}
+.modal-close,.drop-close{min-width:44px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--sky);outline-offset:2px}
+.tbl-wrap{position:relative;max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
+.tbl-wrap:focus-visible{outline-offset:-2px}
+#mainTable,.preview-table{min-width:1100px}
+table{font-size:11px}
+thead th{padding:8px 10px;font-size:11px}
+td{padding:8px 10px;font-size:11px}
+td.mono{font-size:11px}
+.badge{font-size:10px;padding:3px 9px}
+.modal-overlay,.drop-overlay{overflow:auto;overscroll-behavior:contain;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+.modal,.preview-modal,.drop-box{max-height:calc(100vh - 20px);max-height:calc(100dvh - 20px)}
+.modal-body,.preview-body{min-height:0;overscroll-behavior:contain}
+.filter-dd{max-width:calc(100vw - 16px);max-height:calc(100vh - 80px);max-height:calc(100dvh - 80px);overflow:auto}
+.stat,.stat-val,.customers-table td{min-width:0;overflow-wrap:anywhere}
+
+@media(max-width:760px){
+  .nav{height:auto;min-height:var(--nav-h);display:grid;grid-template-columns:48px minmax(0,1fr);gap:6px 10px;padding:6px 10px max(6px,env(safe-area-inset-bottom))}
+  .nav-brand{grid-column:1;grid-row:1}.nav-logo{width:48px;height:44px}.nav-sep{display:none}
+  .nav-tabs{grid-column:2;grid-row:1;min-width:0;justify-content:flex-end}.nav-tab{padding-inline:11px}
+  .nav-right{grid-column:1/-1;grid-row:2;display:grid;width:100%;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0}
+  .nav-action{min-width:0;white-space:normal}.nav-pill{display:none}
+  .page{padding:16px 10px max(60px,env(safe-area-inset-bottom))}
+  .page-head,.customers-heading{margin-bottom:16px}
+  .toolbar{align-items:stretch;padding:12px}.toolbar>.srch{flex:1 0 100%;width:100%;max-width:none;min-height:44px}.toolbar>.tb-sep{display:none}
+  .tb-right{display:grid;width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-left:0}
+  .tb-right .rcount{grid-column:1/-1}.tb-right .btn{width:100%;justify-content:center;white-space:normal}
+  .fp-wrap,.fp-wrap .f-pill,.toolbar>.f-pill{min-width:0}.f-pill{justify-content:center}
+  .filter-dd{position:fixed;inset:auto 8px max(8px,env(safe-area-inset-bottom));width:auto;min-width:0}
+  .customers-table{display:block;font-size:12px}.customers-table thead{display:none}.customers-table tbody{display:block}
+  .customers-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;padding:12px;border-bottom:1px solid var(--border)}
+  .customers-table tbody td{display:block;padding:6px 2px;border:0;font-size:12px;line-height:1.4;text-align:left!important;white-space:normal}
+  .customers-table tbody td::before{content:attr(data-label);display:block;margin-bottom:3px;color:var(--ink3);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+  .customers-table .customer-name{min-width:0;max-width:none}.customers-table .customers-empty{grid-column:1/-1}
+  .customers-count{justify-content:center}
+  .modal-foot,.preview-foot,.btn-row{flex-wrap:wrap}.preview-count{flex:1 0 100%;margin:0}
+  .drop-box{width:100%;padding:42px 16px 16px;overflow:auto}.drop-box-inner{padding:28px 12px}
+}
+
+@media(max-width:600px){
+  .customers-toolbar{grid-template-columns:1fr;padding:12px}.customers-toolbar .srch{grid-column:auto}.customers-toolbar :where(select,.btn,.srch){min-height:44px}
+  .customers-heading{gap:12px}.customers-heading-actions{display:grid;grid-template-columns:1fr;width:100%}.customers-heading-actions .btn,.customers-heading-actions .btn-file{width:100%;justify-content:center}
+  .customer-form-modal{width:100%}.modal-head,.modal-body,.modal-foot{padding-inline:14px}.modal-foot{display:grid;grid-template-columns:1fr}.modal-foot .btn{width:100%;justify-content:center}
+}
+
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:1fr}.stat{padding:14px 16px}.stat-val{font-size:18px}
+  .customers-table tbody tr{grid-template-columns:1fr}
+  .tb-right{grid-template-columns:1fr}.toolbar>.f-pill,.toolbar>.fp-wrap,.toolbar>.fp-wrap .f-pill{width:100%}
+  .active-filters{padding:10px 12px}.upload-trigger{padding:28px 14px}
+  .preview-foot{display:grid;grid-template-columns:1fr}.preview-foot .btn{width:100%;justify-content:center}
+}
+
+@media(max-height:520px){
+  .modal,.preview-modal,.drop-box{max-height:calc(100dvh - 8px)}
+  .modal-head,.modal-body,.modal-foot{padding-block:10px}.drop-box-inner{padding-block:16px}
+}
+
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
 /* ios-style segmented control */
 .seg-ctrl{
   display:inline-flex;
@@ -721,7 +785,7 @@ td.val-green{color:var(--green);font-weight:700}
       <button onclick="closePreview()" style="margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
     <div class="preview-body">
-      <div class="tbl-wrap">
+      <div class="tbl-wrap" role="region" aria-label="Tabela da pré-visualização" tabindex="0">
         <table class="preview-table" id="previewTable">
           <thead><tr id="previewHead"></tr></thead>
           <tbody id="previewBody"></tbody>
@@ -847,7 +911,7 @@ td.val-green{color:var(--green);font-weight:700}
         <div class="active-filters" id="activeFiltersBar" style="display:none"></div>
 
         <!-- table -->
-        <div class="tbl-wrap">
+        <div class="tbl-wrap" role="region" aria-label="Relatório de comissões" tabindex="0">
           <table id="mainTable">
             <thead><tr id="mainHead"></tr></thead>
             <tbody id="mainBody"></tbody>
@@ -880,7 +944,7 @@ td.val-green{color:var(--green);font-weight:700}
         <select id="cliRep" onchange="renderClients()" aria-label="Filtrar por representante"><option value="">Todos os representantes</option><option value="__direto__">Sem representante</option></select>
         <button class="btn btn-ghost" type="button" onclick="clearClientFilters()">Limpar</button>
       </div>
-      <div class="tbl-wrap">
+      <div class="tbl-wrap" role="region" aria-label="Clientes de comissões" tabindex="0">
         <table class="customers-table">
           <thead><tr><th>Código</th><th>Razão social</th><th>CNPJ</th><th>Cidade</th><th>UF</th><th>Classe</th><th>Segmento</th><th>Vendedor</th><th>Representante</th><th>Atualizado</th></tr></thead>
           <tbody id="cliBody"></tbody>
@@ -1342,18 +1406,19 @@ function buildHead(){
 // ══════════════ TABLE RENDER ══════════════
 function cellVal(r,col){
   const v=r[col.key];
+  const label=` data-label="${col.label}"`;
   switch(col.type){
-    case'mono': return`<td class="mono">${v??''}</td>`;
-    case'bold': return`<td><strong>${v??''}</strong></td>`;
-    case'brl':  return`<td class="right" style="color:var(--ink2)">R$ ${fmt(v)}</td>`;
-    case'brl-bold':return`<td class="right val-green">R$ ${fmt(v)}</td>`;
-    case'pct':  return`<td class="right" style="color:var(--ink2)">${v}%</td>`;
-    case'badge-seg':return`<td><span class="badge ${SEG_CLR[v]||'b-gray'}">${v||'—'}</span></td>`;
-    case'badge-vend':return`<td><span class="badge b-blue">${v||'—'}</span></td>`;
+    case'mono': return`<td${label} class="mono">${v??''}</td>`;
+    case'bold': return`<td${label}><strong>${v??''}</strong></td>`;
+    case'brl':  return`<td${label} class="right" style="color:var(--ink2)">R$ ${fmt(v)}</td>`;
+    case'brl-bold':return`<td${label} class="right val-green">R$ ${fmt(v)}</td>`;
+    case'pct':  return`<td${label} class="right" style="color:var(--ink2)">${v}%</td>`;
+    case'badge-seg':return`<td${label}><span class="badge ${SEG_CLR[v]||'b-gray'}">${v||'—'}</span></td>`;
+    case'badge-vend':return`<td${label}><span class="badge b-blue">${v||'—'}</span></td>`;
     case'badge-rep':
-      if(!v)return`<td><span class="badge b-green">Direto</span></td>`;
-      return`<td><span class="badge b-violet">${v}</span></td>`;
-    default:return`<td>${v??''}</td>`;
+      if(!v)return`<td${label}><span class="badge b-green">Direto</span></td>`;
+      return`<td${label}><span class="badge b-violet">${v}</span></td>`;
+    default:return`<td${label}>${v??''}</td>`;
   }
 }
 
@@ -1801,16 +1866,16 @@ function renderClients(){
   if(!data.length){body.innerHTML='<tr><td class="customers-empty" colspan="10">Nenhum cliente encontrado com os filtros informados.</td></tr>';return;}
   body.innerHTML=data.map((c,i)=>`
     <tr style="animation-delay:${Math.min(i*6,160)}ms">
-      <td class="customer-code">${escapeHtml(c.codigo)}</td>
-      <td class="customer-name">${escapeHtml(c.razao_social)}</td>
-      <td>${c.cnpj?escapeHtml(formatClientCnpj(c.cnpj)):'<span class="customer-muted">—</span>'}</td>
-      <td>${c.cidade?escapeHtml(c.cidade):'<span class="customer-muted">—</span>'}</td>
-      <td>${c.uf?escapeHtml(c.uf):'<span class="customer-muted">—</span>'}</td>
-      <td>${c.classe?`<span class="badge b-blue">${escapeHtml(c.classe)}</span>`:'<span class="badge b-gray">Não classificado</span>'}</td>
-      <td>${c.segmento?`<span class="badge ${SEG_CLR[c.segmento]||'b-gray'}">${escapeHtml(c.segmento)}</span>`:'<span class="badge b-gray">Não classificado</span>'}</td>
-      <td>${c.vendedor?escapeHtml(c.vendedor):'<span class="customer-muted">—</span>'}</td>
-      <td>${c.representante?escapeHtml(c.representante):'<span class="badge b-green">Direto</span>'}</td>
-      <td class="customer-muted">${formatClientDate(c.atualizado_em)}</td>
+      <td data-label="Código" class="customer-code">${escapeHtml(c.codigo)}</td>
+      <td data-label="Razão social" class="customer-name">${escapeHtml(c.razao_social)}</td>
+      <td data-label="CNPJ">${c.cnpj?escapeHtml(formatClientCnpj(c.cnpj)):'<span class="customer-muted">—</span>'}</td>
+      <td data-label="Cidade">${c.cidade?escapeHtml(c.cidade):'<span class="customer-muted">—</span>'}</td>
+      <td data-label="UF">${c.uf?escapeHtml(c.uf):'<span class="customer-muted">—</span>'}</td>
+      <td data-label="Classe">${c.classe?`<span class="badge b-blue">${escapeHtml(c.classe)}</span>`:'<span class="badge b-gray">Não classificado</span>'}</td>
+      <td data-label="Segmento">${c.segmento?`<span class="badge ${SEG_CLR[c.segmento]||'b-gray'}">${escapeHtml(c.segmento)}</span>`:'<span class="badge b-gray">Não classificado</span>'}</td>
+      <td data-label="Vendedor">${c.vendedor?escapeHtml(c.vendedor):'<span class="customer-muted">—</span>'}</td>
+      <td data-label="Representante">${c.representante?escapeHtml(c.representante):'<span class="badge b-green">Direto</span>'}</td>
+      <td data-label="Atualizado" class="customer-muted">${formatClientDate(c.atualizado_em)}</td>
     </tr>`).join('');
 }
 

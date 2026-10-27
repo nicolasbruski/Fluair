@@ -1,0 +1,306 @@
+/* TASK-005: Cálculo, Detalhe e Histórico. */
+
+#s-calc,
+#s-detalhe,
+#calc-main,
+.calc-workspace,
+.calc-preview-banner,
+.kitCard,
+.detail-history-entry,
+.detail-history-content {
+  min-width: 0;
+}
+
+.calc-preview-banner,
+.kitCard,
+.kfV,
+.calc-active-matrix,
+.calc-save-subtitle,
+.detail-history-content,
+.detail-history-content .order-source {
+  overflow-wrap: anywhere;
+}
+
+.calc-table-wrap,
+.detail-composition-region {
+  max-height: min(520px, 65vh);
+}
+
+.calc-table-wrap table,
+.detail-composition-table {
+  min-width: 1040px;
+}
+
+.calc-table-wrap th,
+.calc-table-wrap td,
+.detail-composition-table th,
+.detail-composition-table td {
+  white-space: normal;
+}
+
+.calc-table-wrap .calc-table-number,
+.detail-composition-table :where(.r2, .pm2, .tm2, .pn2, .tn2, .np2) {
+  white-space: nowrap;
+}
+
+.calc-table-wrap :where(th, td):first-child,
+.detail-composition-table :where(th, td):first-child {
+  min-width: 180px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.calc-table-wrap :where(th, td):nth-child(4),
+.detail-composition-table :where(th, td):nth-child(4) {
+  width: 72px;
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+.calc-customer-dialog,
+.calc-matrices-dialog,
+.calc-save-dialog,
+.detail-history-dialog {
+  display: flex;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.calc-customer-dialog > .modal-header,
+.calc-customer-dialog > .modal-footer,
+.calc-matrices-dialog > .modal-header,
+.calc-matrices-dialog > .modal-footer,
+.detail-history-dialog > .modal-header,
+.detail-history-dialog > .modal-footer {
+  flex: 0 0 auto;
+}
+
+.calc-customer-dialog .calc-customer-list,
+.calc-matrices-dialog .calc-matrix-cards,
+.detail-history-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.calc-customer-dialog .calc-customer-options {
+  max-height: none;
+}
+
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.detail-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.detail-version-photo {
+  display: flex;
+  flex: 0 0 180px;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.detail-version-photo__label {
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.detail-history-dialog {
+  width: min(680px, 100%);
+  max-width: 680px;
+}
+
+.detail-history-body {
+  padding-inline: 2px;
+}
+
+.detail-history-entry {
+  display: grid;
+  grid-template-columns: 10px 64px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-history-marker {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text3);
+}
+
+.detail-history-marker.is-current {
+  background: var(--accent);
+}
+
+.detail-history-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .calc-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calc-sidebar {
+    position: static;
+    order: -1;
+  }
+
+  .calc-preview-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calc-preview-actions > * {
+    flex: 1 1 150px;
+    justify-content: center;
+  }
+
+  .detail-toolbar-spacer {
+    display: none;
+  }
+
+  .detail-toolbar > * {
+    flex: 1 1 180px;
+    justify-content: center;
+  }
+
+  .detail-version-photo {
+    flex-basis: 100%;
+    align-items: stretch;
+  }
+
+  .detail-version-photo .media-image {
+    width: 100% !important;
+    height: 180px !important;
+  }
+
+  .detail-history-entry {
+    grid-template-columns: 10px 64px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .detail-history-actions {
+    grid-column: 2 / -1;
+    justify-content: stretch;
+  }
+
+  .detail-history-actions .btn {
+    flex: 1 1 120px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .calc-page-toolbar {
+    margin-bottom: 10px;
+  }
+
+  .calc-sidebar .card {
+    padding: 14px;
+  }
+
+  .calc-customer-dialog .grid-search {
+    flex: 0 0 auto;
+  }
+
+  .calc-customer-dialog .calc-customer-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32px;
+    gap: 7px 10px;
+    padding: 12px;
+  }
+
+  .calc-customer-code,
+  .calc-customer-name,
+  .calc-customer-class,
+  .calc-customer-owner {
+    display: block;
+    grid-column: 1;
+    width: auto;
+    max-width: 100%;
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  .calc-customer-name strong,
+  .calc-customer-name small,
+  .calc-customer-owner {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+  }
+
+  .calc-customer-state {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    align-self: center;
+  }
+
+  .kitCard {
+    align-items: stretch;
+    padding: 14px;
+  }
+
+  .kitCard > .kf {
+    flex: 1 1 100%;
+  }
+
+  .totGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tVal {
+    font-size: clamp(18px, 7vw, 22px);
+    overflow-wrap: anywhere;
+  }
+
+  .detail-toolbar > *,
+  .calc-preview-actions > * {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .detail-history-entry {
+    grid-template-columns: 10px minmax(0, 1fr);
+  }
+
+  .detail-history-entry > .media-image {
+    grid-column: 2;
+    width: 100% !important;
+    height: 120px !important;
+  }
+
+  .detail-history-content,
+  .detail-history-actions {
+    grid-column: 2;
+  }
+}
+
+@media (max-height: 520px) {
+  .calc-customer-dialog,
+  .calc-matrices-dialog,
+  .calc-save-dialog,
+  .detail-history-dialog {
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  .calc-table-wrap,
+  .detail-composition-region {
+    max-height: 240px;
+  }
+}

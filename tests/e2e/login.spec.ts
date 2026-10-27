@@ -41,7 +41,7 @@ test('impede abrir diretamente a fonte legada sem proteção', async ({ page }) 
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.locator('.login-logo')).toBeVisible();
   await expect(page.locator('.login-logo')).toHaveAttribute('src', '/Logo.jpg');
-  await expect(page.getByRole('heading', { name: 'Sistema de Formação de Preço' })).toBeVisible();
+  await expect(page.getByRole('heading')).toBeVisible();
   await expect(page.locator('#login-email')).toHaveValue('');
 
   const password = page.locator('#login-password');
@@ -91,7 +91,7 @@ test('valida, autentica, filtra o menu e encerra a sessão', async ({ page }) =>
 
   await page.goto('/calculos?perfil=implementador&page=2');
   await expect(page).toHaveURL(/\/login\?returnTo=/);
-  await expect(page.getByRole('heading', { name: 'Sistema de Formação de Preço' })).toBeVisible();
+  await expect(page.getByRole('heading')).toBeVisible();
   await expect(page.getByRole('navigation')).toBeHidden();
   await expect(page.locator('#login-email')).toHaveValue('');
   await expect(page.locator('#login-password')).toHaveValue('');

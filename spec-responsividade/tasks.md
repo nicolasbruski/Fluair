@@ -54,18 +54,18 @@ Uma tarefa somente pode ser marcada como `[x]` quando:
 
 ## 5. Matriz obrigatória de validação
 
-| Identificador | Viewport | Uso principal |
-| --- | --- | --- |
-| `mobile-compact` | 320 × 568 | Mínimos rígidos, modais e ações empilhadas |
-| `mobile` | 390 × 844 | Experiência móvel principal |
-| `mobile-wide` | 412 × 915 | Conteúdo móvel com largura intermediária |
-| `mobile-landscape` | 667 × 375 | Baixa altura e orientação horizontal |
-| `tablet-portrait` | 768 × 1024 | Transição para tablet |
-| `tablet-landscape` | 1024 × 768 | Transição para desktop |
-| `notebook` | 1280 × 720 | Altura limitada de notebook |
-| `desktop` | 1440 × 900 | Layout desktop principal |
-| `desktop-large` | 1920 × 1080 | Limites máximos de conteúdo |
-| `ultrawide` | 2560 × 1080 | Centralização e uso controlado de largura |
+| Identificador      | Viewport    | Uso principal                              |
+| ------------------ | ----------- | ------------------------------------------ |
+| `mobile-compact`   | 320 × 568   | Mínimos rígidos, modais e ações empilhadas |
+| `mobile`           | 390 × 844   | Experiência móvel principal                |
+| `mobile-wide`      | 412 × 915   | Conteúdo móvel com largura intermediária   |
+| `mobile-landscape` | 667 × 375   | Baixa altura e orientação horizontal       |
+| `tablet-portrait`  | 768 × 1024  | Transição para tablet                      |
+| `tablet-landscape` | 1024 × 768  | Transição para desktop                     |
+| `notebook`         | 1280 × 720  | Altura limitada de notebook                |
+| `desktop`          | 1440 × 900  | Layout desktop principal                   |
+| `desktop-large`    | 1920 × 1080 | Limites máximos de conteúdo                |
+| `ultrawide`        | 2560 × 1080 | Centralização e uso controlado de largura  |
 
 A suíte rápida de layout deve cobrir ao menos as sete dimensões exigidas na seção 16.2 da spec. As
 dimensões adicionais desta tabela podem ser cobertas por testes profundos selecionados ou revisão
@@ -94,7 +94,7 @@ TASK-008 Matriz completa, regressões e quality gate
 
 ## 7. Tarefas
 
-### [ ] TASK-001 — Registrar baseline e construir a infraestrutura de testes responsivos
+### [x] TASK-001 — Registrar baseline e construir a infraestrutura de testes responsivos
 
 - Prioridade: P0.
 - Dependências: nenhuma.
@@ -147,9 +147,41 @@ TASK-008 Matriz completa, regressões e quality gate
 Existe uma base automatizada que reproduz o estado inicial, percorre todas as rotas e detecta os tipos
 de regressão que esta iniciativa pretende corrigir.
 
+#### Resultado e evidências
+
+- Baseline registrado em 18/10/2026, antes de qualquer mudança de produção:
+  - `npm run typecheck`: aprovado;
+  - `npm run lint`: aprovado;
+  - `npm run format:check`: reprovado por 53 arquivos preexistentes fora do padrão; os arquivos novos
+    e alterados nesta tarefa passam em verificação direcionada;
+  - `npm test`: 71 arquivos e 307 testes aprovados;
+  - `npm run test:integration`: 10 arquivos e 84 testes aprovados;
+  - `npm run test:e2e`: 30 de 33 testes aprovados. Além da falha conhecida de Clientes, a execução
+    paralela expôs duas falhas preexistentes em `price-lists.spec.ts`, ambas chegando ao estado de erro
+    por chamada não mockada de `orders/last-sale-prices`;
+  - `npm run test:e2e -- tests/e2e/customers.spec.ts`: reproduziu isoladamente a falha conhecida em
+    `#order-saved-draft` (1 aprovado e 1 reprovado), sem alteração responsiva aplicada.
+- `playwright.config.ts` agora possui um projeto funcional e dez projetos responsivos nomeados para
+  toda a matriz da seção 5. Cada dimensão pode ser executada isoladamente com
+  `npx playwright test tests/e2e/responsiveness.spec.ts --project=<nome>`.
+- `tests/e2e/helpers/responsive-layout.ts` fornece asserções para overflow global, contenção integral
+  na viewport, interseção, área interativa mínima, auditoria de falhas de API e screenshots estáveis.
+- `tests/e2e/responsive-layout-helpers.spec.ts`: 3 de 3 testes aprovados, incluindo falha controlada
+  para elemento fora da viewport e distinção entre overflow interno permitido e overflow global.
+- `tests/e2e/responsiveness.spec.ts` percorre Login, rotas autenticadas, acesso reduzido e Comissões,
+  cobrindo estados carregado, vazio, erro e sem permissão sem depender de uma API real.
+- Matriz inicial: 23 de 30 cenários aprovados. As sete reprovações são evidência do baseline que as
+  tarefas visuais seguintes devem corrigir: largura global de 1248 px no sistema principal em 768 e
+  1024 px, e largura global de 414 px em Comissões nas viewports de 320, 390 e 412 px.
+- Screenshots ficam em `test-results/responsiveness/<viewport>/` com nomes
+  `<rota>--<estado>.png`; traces e demais resultados ficam em `test-results/playwright/`. Ambos são
+  transitórios e permanecem cobertos pelo `.gitignore` existente.
+- Desvio ambiental: Vitest retorna `spawn EPERM` dentro do sandbox ao iniciar `esbuild`; as execuções
+  válidas do baseline foram repetidas fora do sandbox. Nenhum arquivo de produção foi alterado.
+
 ---
 
-### [ ] TASK-002 — Implementar a fundação responsiva compartilhada
+### [x] TASK-002 — Implementar a fundação responsiva compartilhada
 
 - Prioridade: P0.
 - Dependências: `TASK-001`.
@@ -206,9 +238,37 @@ de regressão que esta iniciativa pretende corrigir.
 As telas passam a dispor de componentes compartilhados seguros para largura, altura, toque, rolagem e
 mídia, e as tarefas seguintes não precisam reinventar essas proteções.
 
+#### Resultado e evidências
+
+- `src/web/responsive-foundation.css` centraliza os breakpoints orientados por conteúdo (480, 700 e
+  1024 px), contenção de filhos flex/grid, largura e padding fluidos, quebra de texto, grupos de ações,
+  alvos de toque de 44 px, foco visível, safe areas e `prefers-reduced-motion`.
+- O modal base agora respeita `vh`/`dvh`, largura disponível e safe areas, possui rolagem interna
+  previsível e espaçamento compacto em 320 × 568 e 667 × 375. Viewer e estados de mídia preservam a
+  caixa e usam contenção sem deformar imagens.
+- `src/web/responsive-foundation.ts` transforma wrappers compartilhados de tabela, inclusive os
+  inseridos após chamadas à API, em regiões focáveis e rotuladas. Os atributos de estado indicam se
+  existe conteúdo horizontal antes/depois da posição atual.
+- As primitives `.responsive-actions`, `.responsive-table-region`, `.responsive-record-card` e
+  `.responsive-record-field` ficam disponíveis para as tarefas de tela sem duplicar proteções.
+- `tests/e2e/responsive-foundation.spec.ts`: 20 de 20 cenários aprovados nas dez viewports da matriz,
+  cobrindo modal com conteúdo longo e campo próximo ao rodapé, tabela rolável, texto longo, alvos de
+  toque, ausência de overflow global e movimento reduzido.
+- O smoke de `tests/e2e/responsiveness.spec.ts` passou nos quatro cenários do sistema principal antes
+  reprovados em `tablet-portrait` e `tablet-landscape`; a navegação larga fica contida em rolagem
+  interna até receber a composição móvel da `TASK-003`.
+- Os quatro testes E2E existentes de Detalhe e Produtos passaram, cobrindo viewer, imagem ausente e o
+  fluxo de foto sem regressão funcional.
+- Verificações aprovadas: build Vite, `npm run typecheck`, `npm run lint`, Prettier direcionado aos
+  arquivos de código alterados, `npm test` (71 arquivos, 307 testes) e `npm run test:integration`
+  (10 arquivos, 84 testes).
+- Screenshots do smoke foram atualizadas em `test-results/responsiveness/<viewport>/`. A falha de
+  overflow de 94 px no documento independente de Comissões em 320 px permanece isolada e pertence ao
+  recorte explícito da `TASK-007`; nenhuma regra global foi usada para ocultá-la.
+
 ---
 
-### [ ] TASK-003 — Adaptar navegação, autenticação e administração de Usuários
+### [x] TASK-003 — Adaptar navegação, autenticação e administração de Usuários
 
 - Prioridade: P0.
 - Dependências: `TASK-002`.
@@ -261,9 +321,29 @@ mídia, e as tarefas seguintes não precisam reinventar essas proteções.
 Navegação, autenticação e Usuários são integralmente operáveis em celular compacto, sem links escondidos,
 overflow, corte de dados ou ações inacessíveis.
 
+#### Resultado e evidências
+
+- `src/web/responsive-auth-users.css` implementa o menu compacto até 1024 px, contenção de nomes
+  longos, Login em baixa altura, cartões de usuário e cartões rotulados para permissões por perfil.
+- `src/web/main.ts` controla abertura, fechamento, `aria-expanded`, foco inicial, contenção de `Tab`,
+  fechamento por `Escape`, retorno de foco e fechamento ao navegar ou trocar de breakpoint. O menu
+  foi validado com todas as permissões e com apenas `calculation.view`.
+- `src/web/users-page.ts` preserva avatar, nome, e-mail, estado, resumo, perfil e ações; os modais de
+  edição e situação agora contêm o foco e o devolvem ao controle que os abriu.
+- `tests/e2e/task-003-responsiveness.spec.ts`: 40 de 40 cenários aprovados nas dez viewports, com dados
+  longos, menu completo e reduzido, alvos de toque, modais, Login indisponível, baixa altura, ausência
+  de overflow e reflow equivalente a 200% em uma janela de 1280 px.
+- `tests/e2e/login.spec.ts` e `tests/e2e/users.spec.ts`: 6 de 6 testes funcionais aprovados.
+- O smoke geral `npm run test:e2e:responsive` aprovou 27 de 30 cenários. As três falhas restantes são
+  o overflow preexistente de 414 px no módulo externo de Comissões em 320, 390 e 412 px, já atribuído
+  à `TASK-007`; todas as rotas e estados do sistema principal passaram.
+- `npm run build`, `npm run typecheck`, ESLint direcionado e Prettier direcionado foram aprovados.
+- Screenshots transitórias ficam em `test-results/responsiveness/<viewport>/`, incluindo
+  `usuarios--menu-aberto.png`, `usuarios--usuarios-longos.png` e `login--baixa-altura.png`.
+
 ---
 
-### [ ] TASK-004 — Adaptar Busca, Produtos e Listas de Preço para dados densos
+### [x] TASK-004 — Adaptar Busca, Produtos e Listas de Preço para dados densos
 
 - Prioridade: P1.
 - Dependências: `TASK-002`.
@@ -318,9 +398,37 @@ overflow, corte de dados ou ações inacessíveis.
 Busca, Produtos e Listas de Preço oferecem uma experiência móvel intencional, legível e completa, sem
 usar somente redução de fonte ou rolagem global para acomodar dados.
 
+#### Resultado e evidências
+
+- `src/web/responsive-catalogs.css` documenta e implementa as estratégias: Busca e Produtos viram
+  cartões rotulados até 700 px; composição de kits e estrutura de listas preservam comparação em
+  regiões de rolagem interna acessíveis, com colunas de identificação em larguras legíveis.
+- A Busca ganhou ordenação móvel explícita por campo e direção, sincronizada com a URL e o backend.
+  Foto, código, descrição, referência, perfil, preços, data, responsável, paginação e detalhe continuam
+  acessíveis; ocultar preços de referência não desorganiza o cartão.
+- Produtos empilha busca, filtro e contagem, preserva referências e descrições longas e oferece ações de
+  foto e composição com área mínima de toque. Modal de foto, viewer e composição respeitam largura,
+  altura dinâmica e baixa altura.
+- Listas de Preço empilha cards, público, faixa, versão, importação, prévia e ações. O formulário passa
+  para uma coluna; busca e paginação da estrutura quebram sem corte dentro do modal.
+- `tests/e2e/task-004-responsiveness.spec.ts`: 30 de 30 cenários aprovados nas dez viewports da matriz,
+  cobrindo dados longos, ordenação, ações, viewer, modal de foto, composição, formulário, estrutura,
+  rolagem interna e ausência de overflow global. Após revisão visual, os 3 cenários de 320 px foram
+  repetidos e aprovados.
+- Testes funcionais existentes de Busca e Produtos: 4 de 4 aprovados. Em Listas de Preço, 3 de 5
+  passaram; as duas falhas são as chamadas não mockadas de `orders/last-sale-prices` já registradas no
+  baseline da `TASK-001`, sem relação com as alterações responsivas.
+- Verificações aprovadas: `npm run build`, `npm run typecheck`, `npm run lint`, Prettier direcionado,
+  `npm test` (71 arquivos e 307 testes) e `npm run test:integration` (10 arquivos e 84 testes). A
+  asserção do transformador foi alinhada ao logo decorativo da navegação entregue na `TASK-003`.
+  Screenshots transitórias foram geradas em `test-results/responsiveness/<viewport>/` para os três
+  fluxos.
+- A documentação das telas foi atualizada em `docs/telas/02-busca.md`,
+  `docs/telas/10-produtos.md` e `docs/telas/06-atualizacao-matriz.md`.
+
 ---
 
-### [ ] TASK-005 — Adaptar Cálculo, Detalhe e Histórico
+### [x] TASK-005 — Adaptar Cálculo, Detalhe e Histórico
 
 - Prioridade: P0.
 - Dependências: `TASK-002`.
@@ -371,9 +479,33 @@ usar somente redução de fonte ou rolagem global para acomodar dados.
 O usuário consegue configurar, simular, salvar e consultar um cálculo em todas as faixas obrigatórias,
 sem mínimos incompatíveis, corte de modal ou perda de ações.
 
+#### Resultado e evidências
+
+- `src/web/responsive-calculations.css` implementa a estratégia das três telas: sidebar acima do
+  resultado até 760 px, totais fluidos, ações empilháveis, textos longos seguros e tabelas com
+  rolagem interna. A composição conserva código, descrição, quantidade, unidade e preços.
+- O seletor de cliente passa a cartões completos em telas compactas, sem ocultar código, razão
+  social, classe ou responsável. Os modais de cliente, listas e histórico mantêm cabeçalho e rodapé
+  alcançáveis, com rolagem apenas na região de conteúdo em baixa altura.
+- O Detalhe reorganiza foto, identificação, totais e toolbar. O Histórico usa uma grade fluida por
+  versão, preserva todas as ações e mantém o placeholder de foto sem mudar a largura.
+- `tests/e2e/task-005-responsiveness.spec.ts`: 21 cenários aprovados nas dez viewports; os 9 skips são
+  intencionais porque o caso de reflow equivalente a 200% roda somente no projeto `notebook`.
+  Foram cobertos cliente e dados longos, foto presente e ausente, valores grandes, preços ocultos,
+  tabelas internas, modais em 320 × 568 e 667 × 375, ausência de overflow global e ações dentro
+  da viewport.
+- `tests/e2e/calculations.spec.ts` e `tests/e2e/detail.spec.ts`: 4 de 4 testes funcionais aprovados.
+- `npm run build`, `npm run typecheck`, ESLint direcionado, Prettier direcionado e o teste unitário
+  de `prototype-transform` foram aprovados. A primeira tentativa de build no sandbox não pôde
+  baixar o checksum do Prisma; a repetição autorizada fora do sandbox concluiu toda a geração e o
+  build de produção.
+- A documentação foi alinhada em `docs/telas/03-detalhe-kit.md`,
+  `docs/telas/04-calculo-preco.md` e `docs/telas/05-historico-versoes.md`. Screenshots transitórias
+  ficam em `test-results/responsiveness/<viewport>/`.
+
 ---
 
-### [ ] TASK-006 — Adaptar Pedidos e Aprovações de preço
+### [x] TASK-006 — Adaptar Pedidos e Aprovações de preço
 
 - Prioridade: P0.
 - Dependências: `TASK-002`.
@@ -432,6 +564,33 @@ sem mínimos incompatíveis, corte de modal ou perda de ações.
 Todo o ciclo do pedido, incluindo exceção e decisão administrativa, funciona nas viewports obrigatórias
 sem sobreposição, corte ou necessidade de rolagem horizontal do documento.
 
+#### Resultado e evidências
+
+- `src/web/responsive-orders-approvals.css` centraliza a adaptação vertical: rascunhos possuem rolagem
+  horizontal local e indicação lateral; o drawer usa largura móvel, `dvh` e `safe-area`; catálogo,
+  cliente, observação, totais e paginação permanecem contidos.
+- O carrinho empilha quantidade, preço-base, impostos e subtotal abaixo de 700 px. Fotos e remoção não
+  se sobrepõem, os quatro impostos possuem área clicável mínima de 44 px e textos monetários longos
+  quebram sem serem truncados. A revisão e a solicitação de exceção mantêm cabeçalho e rodapé enquanto
+  o conteúdo interno rola.
+- Aprovações preserva filtros, cartões móveis, tabela intermediária com overflow interno, detalhe,
+  justificativa, itens e decisão. O painel de notificações fica ancorado à viewport até 1024 px e não
+  herda o deslocamento do menu móvel.
+- `tests/e2e/task-006-responsiveness.spec.ts`: 30 de 30 cenários aprovados nas dez viewports, cobrindo
+  cinco rascunhos, drawer, fotos, carrinho misto, impostos, números e textos longos, observação com
+  viewport reduzida, revisão, fila administrativa, detalhe, decisão e notificações. As asserções
+  verificam overflow global, bounding boxes, sobreposição, área de toque e corte do subtotal.
+- `tests/e2e/orders-customers.spec.ts` e `tests/e2e/admin-price-approvals.spec.ts`: 11 de 11 testes
+  funcionais aprovados. O cenário móvel preexistente do sino foi alinhado à navegação entregue na
+  `TASK-003`, abrindo o menu antes de acionar a notificação.
+- Verificações aprovadas: `npm run build`, `npm run typecheck`, `npm run lint`, Prettier direcionado,
+  `npm test` (71 arquivos e 307 testes) e `npm run test:integration` (10 arquivos e 84 testes).
+  Build e Vitest precisaram ser repetidos fora do sandbox devido, respectivamente, ao bloqueio de rede
+  do checksum do Prisma e a `spawn EPERM` do `esbuild`.
+- A revisão visual de 320 × 568 identificou e corrigiu a sobreposição entre a segunda linha de impostos
+  e o subtotal. Screenshots transitórias ficam em `test-results/responsiveness/<viewport>/`; a
+  documentação foi atualizada em `docs/telas/08-pedidos.md` e `docs/telas/11-aprovacoes-preco.md`.
+
 ---
 
 ### [ ] TASK-007 — Adaptar Clientes e o módulo de Comissões
@@ -440,7 +599,7 @@ sem sobreposição, corte ou necessidade de rolagem horizontal do documento.
 - Dependências: `TASK-002`.
 - Seções principais: 9 a 11, 13.7 e 13.11.
 - Entrega: administração de clientes e operações de Comissões legíveis e operáveis em telas compactas,
-com estratégias móveis consistentes para filtros, cartões, tabelas e modais.
+  com estratégias móveis consistentes para filtros, cartões, tabelas e modais.
 
 #### Trabalho incluído
 
@@ -496,7 +655,7 @@ ações em todas as faixas de referência.
 - Dependências: `TASK-003` a `TASK-007`.
 - Seções principais: 6, 14 a 20.
 - Entrega: validação integrada de todas as rotas, correção das regressões encontradas, documentação e
-evidência suficiente para declarar o sistema responsivo dentro da matriz acordada.
+  evidência suficiente para declarar o sistema responsivo dentro da matriz acordada.
 
 #### Trabalho incluído
 
@@ -569,23 +728,23 @@ matriz de resoluções definida, sem depender apenas de inspeção manual.
 
 ## 8. Cobertura da especificação por tarefa
 
-| Área da spec | Tarefas responsáveis |
-| --- | --- |
-| Contexto, matriz e evidências | `TASK-001`, `TASK-008` |
-| Layout global e telas grandes | `TASK-002`, `TASK-008` |
-| Navegação e sessão | `TASK-003` |
-| Tabelas e coleções densas | `TASK-002`, `TASK-004`, `TASK-005`, `TASK-006`, `TASK-007` |
-| Formulários e ações | `TASK-002` a `TASK-007` |
+| Área da spec                   | Tarefas responsáveis                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| Contexto, matriz e evidências  | `TASK-001`, `TASK-008`                                     |
+| Layout global e telas grandes  | `TASK-002`, `TASK-008`                                     |
+| Navegação e sessão             | `TASK-003`                                                 |
+| Tabelas e coleções densas      | `TASK-002`, `TASK-004`, `TASK-005`, `TASK-006`, `TASK-007` |
+| Formulários e ações            | `TASK-002` a `TASK-007`                                    |
 | Modais, drawers e notificações | `TASK-002`, `TASK-003`, `TASK-005`, `TASK-006`, `TASK-007` |
-| Imagens e mídia | `TASK-002`, `TASK-004`, `TASK-005`, `TASK-006` |
-| Login e Usuários | `TASK-003` |
-| Busca, Produtos e Listas | `TASK-004` |
-| Cálculo, Detalhe e Histórico | `TASK-005` |
-| Pedidos e Aprovações | `TASK-006` |
-| Clientes e Comissões | `TASK-007` |
-| Acessibilidade responsiva | `TASK-002` a `TASK-008` |
-| Organização técnica CSS | `TASK-002`, `TASK-008` |
-| Testes e critérios de aceite | `TASK-001`, `TASK-008` |
+| Imagens e mídia                | `TASK-002`, `TASK-004`, `TASK-005`, `TASK-006`             |
+| Login e Usuários               | `TASK-003`                                                 |
+| Busca, Produtos e Listas       | `TASK-004`                                                 |
+| Cálculo, Detalhe e Histórico   | `TASK-005`                                                 |
+| Pedidos e Aprovações           | `TASK-006`                                                 |
+| Clientes e Comissões           | `TASK-007`                                                 |
+| Acessibilidade responsiva      | `TASK-002` a `TASK-008`                                    |
+| Organização técnica CSS        | `TASK-002`, `TASK-008`                                     |
+| Testes e critérios de aceite   | `TASK-001`, `TASK-008`                                     |
 
 ## 9. Controle de escopo
 
@@ -615,4 +774,3 @@ Ao final das oito tarefas:
 - navegação e Usuários deixarão de depender do layout desktop;
 - testes automatizados impedirão regressões de overflow e alcance;
 - novas telas terão padrões documentados para manter a responsividade.
-

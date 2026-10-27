@@ -1,4 +1,10 @@
 import type { AuthenticatedUser, PermissionCode } from '../shared/auth.js';
+import './responsive-foundation.css';
+import './responsive-auth-users.css';
+import './responsive-catalogs.css';
+import './responsive-calculations.css';
+import './responsive-orders-approvals.css';
+import './responsive-customers.css';
 import { initializeCalculationsPage, showCalculationsPage } from './calculations-page.js';
 import { initializeDetailPage, showDetailPage } from './detail-page.js';
 import { currentSession, login, logout } from './services/auth-api.js';
@@ -14,6 +20,7 @@ import {
   initializeAdminPriceApprovalsPage,
   showAdminPriceApprovalsPage,
 } from './admin-price-approvals-page.js';
+import { initializeResponsiveFoundation } from './responsive-foundation.js';
 
 declare global {
   interface Window {
@@ -71,6 +78,7 @@ const legacyShow = window.show.bind(window);
 let authenticatedUser: AuthenticatedUser | null = null;
 let submitting = false;
 const referencePriceVisibilityKey = 'fluair:hide-reference-prices';
+const mobileNavigation = window.matchMedia('(max-width: 1024px)');
 
 function element<T extends Element>(selector: string): T {
   const found = document.querySelector<T>(selector);
@@ -138,6 +146,7 @@ function updateNavigation(activeScreen: string | null): void {
   const nav = element<HTMLElement>('#app-nav');
   nav.hidden = !authenticatedUser;
   element<HTMLElement>('#session-user-name').textContent = authenticatedUser?.name ?? '';
+  element<HTMLElement>('#session-user-name').title = authenticatedUser?.name ?? '';
   nav.querySelectorAll<HTMLAnchorElement>('a[data-screen]').forEach((link) => {
     const permissions = (link.dataset.permissions ?? '').split(',') as PermissionCode[];
     const allowed = Boolean(authenticatedUser && hasAnyPermission(authenticatedUser, permissions));
@@ -149,7 +158,67 @@ function updateNavigation(activeScreen: string | null): void {
   });
 }
 
+function setNavigationOpen(open: boolean, restoreFocus = false): void {
+  const nav = element<HTMLElement>('#app-nav');
+  const menu = element<HTMLElement>('#nav-menu');
+  const toggle = element<HTMLButtonElement>('#nav-menu-toggle');
+  const shouldOpen = mobileNavigation.matches && open && !nav.hidden;
+  nav.classList.toggle('menu-open', shouldOpen);
+  menu.classList.toggle('is-open', shouldOpen);
+  toggle.setAttribute('aria-expanded', String(shouldOpen));
+  document.body.classList.toggle('mobile-navigation-open', shouldOpen);
+  if (restoreFocus && mobileNavigation.matches) toggle.focus();
+}
+
+function initializeNavigation(): void {
+  const nav = element<HTMLElement>('#app-nav');
+  const menu = element<HTMLElement>('#nav-menu');
+  const toggle = element<HTMLButtonElement>('#nav-menu-toggle');
+
+  toggle.addEventListener('click', () => {
+    const opening = toggle.getAttribute('aria-expanded') !== 'true';
+    setNavigationOpen(opening);
+    if (opening) {
+      window.requestAnimationFrame(() => {
+        menu
+          .querySelector<HTMLAnchorElement>(
+            'a[aria-current="page"]:not([hidden]), a[data-screen]:not([hidden])',
+          )
+          ?.focus();
+      });
+    }
+  });
+
+  nav.addEventListener('keydown', (event) => {
+    if (!mobileNavigation.matches || toggle.getAttribute('aria-expanded') !== 'true') return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setNavigationOpen(false, true);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [
+      ...menu.querySelectorAll<HTMLElement>(
+        'a:not([hidden]), button:not([hidden]):not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((item) => item.getClientRects().length > 0);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  });
+
+  mobileNavigation.addEventListener('change', () => setNavigationOpen(false));
+}
+
 function showScreen(screen: string): void {
+  setNavigationOpen(false);
   legacyShow(screen);
   updateNavigation(screen);
   if (screen === 'pedido' && authenticatedUser) showOrdersPage(authenticatedUser);
@@ -337,6 +406,8 @@ async function performLogout(): Promise<void> {
 }
 
 async function initialize(): Promise<void> {
+  initializeResponsiveFoundation();
+  initializeNavigation();
   initializeReferencePriceVisibility();
   initializeSearchPage();
   initializeDetailPage();
@@ -361,6 +432,7 @@ async function initialize(): Promise<void> {
     const link = (event.target as Element).closest<HTMLAnchorElement>('a[data-screen]');
     if (!link || link.hidden) return;
     event.preventDefault();
+    setNavigationOpen(false);
     const route = routeForPath(new URL(link.href).pathname);
     if (route) navigateTo(route);
   });

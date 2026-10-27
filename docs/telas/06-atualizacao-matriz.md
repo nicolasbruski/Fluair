@@ -53,6 +53,17 @@ perfis iniciais e duplicava o fluxo atual.
 As tabelas antigas continuam temporariamente para leitura histórica, rollback e escrita dupla das
 listas migradas. Elas não definem as opções exibidas pela interface.
 
+## Comportamento responsivo
+
+- Os cards passam de duas para uma coluna conforme o espaço e empilham cabeçalho, público, faixa,
+  versão, importação, prévia e ações sem truncar dados longos.
+- O formulário usa uma coluna no celular; públicos e ações mantêm alvos de toque adequados.
+- A estrutura preserva sua tabela comparativa com fonte legível e rolagem somente dentro do modal.
+  Busca e paginação empilham em telas estreitas, enquanto título, fechamento e ações continuam
+  alcançáveis em baixa altura.
+- Estados carregando, vazio, erro e ausência de versão ativa ocupam a largura do card sem provocar
+  overflow horizontal global.
+
 ## Fora do escopo atual
 
 Recálculo em massa de todos os kits, fila de processamento e remoção física das tabelas históricas

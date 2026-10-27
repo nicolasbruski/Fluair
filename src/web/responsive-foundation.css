@@ -1,0 +1,273 @@
+/*
+ * Fundação responsiva compartilhada.
+ * Faixas orientadas pelo conteúdo: compacta (<=480), móvel (<=700),
+ * tablet (<=1024) e conteúdo amplo (>1024). Telas específicas podem
+ * antecipar uma quebra quando os próprios dados exigirem.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:where(.screens, .screen, .card, .tblCard, .modal, form, fieldset) > *,
+:where(.cols-2, .cols-3, .cols-side, .pedido-layout) > *,
+:where([class$='-grid'], [class$='-layout'], [class$='-toolbar']) > * {
+  min-width: 0;
+}
+
+:where(.screen, .modal, .card, .tblCard, .responsive-card) {
+  overflow-wrap: anywhere;
+}
+
+.screens {
+  width: min(100%, 1200px);
+}
+
+/* Contenção provisória compartilhada; a composição móvel explícita fica na tarefa de navegação. */
+.nav {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+/* Grupos de ações podem ser reutilizados por telas novas. */
+:where(.responsive-actions, .toolbar-actions, .modal-footer, .user-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+:where(.btn, .pBtn, .expBtn) {
+  min-height: 44px;
+}
+
+:where(
+  .modal-close,
+  .password-toggle,
+  .approval-notifications-button,
+  .approval-notifications-close
+) {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent, #007aff);
+  outline-offset: 2px;
+}
+
+/* Modal base: usa a viewport dinâmica e mantém todo o conteúdo alcançável. */
+.modal-overlay {
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+
+.modal {
+  width: min(100%, 440px);
+  max-width: 100%;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.modal-header {
+  min-width: 0;
+}
+
+.modal-header > :first-child,
+.modal-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.modal-close {
+  flex: 0 0 44px;
+}
+
+/* Região de tabela: a sombra lateral indica conteúdo ainda disponível. */
+:where(
+  .responsive-table-region,
+  .tbl-wrap,
+  .calc-table-wrap,
+  .customers-table-wrap,
+  .approval-table-wrap,
+  .products-composition-body,
+  .price-list-structure-content
+) {
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+:where([data-responsive-region='true']):focus-visible {
+  outline: 2px solid var(--accent, #007aff);
+  outline-offset: -2px;
+}
+
+:where([data-responsive-region='true'][data-scrollable='true']) {
+  background-image:
+    linear-gradient(to right, var(--surface, #fff), transparent 18px),
+    linear-gradient(to left, var(--surface, #fff), transparent 18px);
+  background-attachment: local, local;
+  background-position: left, right;
+  background-repeat: no-repeat;
+  background-size: 28px 100%;
+}
+
+/* Cartão de registro com rótulos vindos de data-label. */
+.responsive-record-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: var(--r, 10px);
+  background: var(--surface, #fff);
+}
+
+.responsive-record-field {
+  min-width: 0;
+}
+
+.responsive-record-field::before {
+  content: attr(data-label);
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text3, #666);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Mídia mantém sua caixa nos estados carregando, vazio e erro. */
+.media-image,
+.products-photo-preview,
+.calc-photo-preview {
+  contain: layout paint;
+  max-width: 100%;
+}
+
+.media-image__content,
+.products-photo-preview img,
+.calc-photo-preview img {
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.media-image-viewer__dialog {
+  display: flex;
+  width: min(900px, 100%);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.media-image-viewer__content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.media-image-viewer__content img {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  max-height: calc(100dvh - 120px);
+}
+
+.tst {
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: max(12px, env(safe-area-inset-left));
+  width: fit-content;
+  max-width: min(340px, calc(100vw - 24px));
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .responsive-record-card {
+    grid-template-columns: 1fr;
+  }
+
+  :where(.responsive-actions, .modal-footer) > :where(.btn, button, a) {
+    flex: 1 1 160px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .screens {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .modal-overlay {
+    align-items: flex-start;
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+
+  .modal {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 18px 16px 16px;
+  }
+
+  .modal-footer > :where(.btn, button, a) {
+    flex-basis: 100%;
+    width: 100%;
+  }
+}
+
+@media (max-height: 520px) {
+  .modal-overlay {
+    align-items: flex-start;
+    padding-block: max(6px, env(safe-area-inset-top));
+  }
+
+  .modal {
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+    padding-block: 14px;
+  }
+
+  .modal-header {
+    margin-bottom: 10px;
+  }
+
+  .modal-footer {
+    margin-top: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

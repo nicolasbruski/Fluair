@@ -71,10 +71,16 @@ function renderMessage(title: string, copy: string): void {
   cell.append(empty);
 }
 
-function appendCell(row: HTMLTableRowElement, text: string, className = ''): HTMLTableCellElement {
+function appendCell(
+  row: HTMLTableRowElement,
+  text: string,
+  className = '',
+  label = '',
+): HTMLTableCellElement {
   const cell = row.insertCell();
   cell.textContent = text;
   cell.className = className;
+  if (label) cell.dataset.label = label;
   return cell;
 }
 
@@ -297,25 +303,30 @@ function render(): void {
   }
   for (const item of items) {
     const row = body.insertRow();
+    row.className = 'products-row';
     const photo = row.insertCell();
     photo.className = 'products-photo-cell';
+    photo.dataset.label = 'Foto';
     photo.append(mediaImage(item, 72, 54));
     const type = row.insertCell();
     type.className = 'products-type';
+    type.dataset.label = 'Tipo';
     const badge = document.createElement('span');
     badge.className = `order-kind ${item.kind === 'KIT' ? 'kit' : 'product'}`;
     badge.textContent = item.kind === 'KIT' ? 'Kit' : 'Produto avulso';
     type.append(badge);
-    appendCell(row, item.code, 'products-code');
-    appendCell(row, item.description, 'products-description');
-    appendCell(row, item.reference || '—', 'products-reference');
+    appendCell(row, item.code, 'products-code', 'Código');
+    appendCell(row, item.description, 'products-description', 'Descrição');
+    appendCell(row, item.reference || '—', 'products-reference', 'Referência');
     appendCell(
       row,
       item.origins.map((origin) => origin.name).join(', ') || '—',
       'products-reference',
+      'Origem',
     );
     const actions = row.insertCell();
     actions.className = 'products-action';
+    actions.dataset.label = 'Ações';
     if (item.kind === 'KIT') {
       const view = document.createElement('button');
       view.type = 'button';

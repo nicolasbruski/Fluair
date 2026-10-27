@@ -118,6 +118,11 @@ Resultado de cruzar uma folha de processo com uma versão de matriz. Deve guarda
 ## Responsividade e acessibilidade
 
 - Todas as ações devem funcionar por teclado.
+- Até 1024 px, a navegação autenticada usa um menu expansível com rolagem própria. O botão
+  informa o estado por `aria-expanded`, `Escape` fecha o menu e devolve o foco, e a rota atual
+  permanece identificada por `aria-current`.
+- Links permitidos, preferência de preços, notificações, identificação da sessão e logout ficam
+  no mesmo fluxo do menu compacto; nenhum deles depende de rolagem horizontal do cabeçalho.
 - Modais devem manter o foco internamente e devolver o foco ao elemento que os abriu.
 - Cores de tabela mínima, normal, alerta e sucesso precisam ser acompanhadas por texto.
 - Tabelas largas podem ter rolagem horizontal sem ocultar ações essenciais.

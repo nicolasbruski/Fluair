@@ -138,3 +138,12 @@ antes da validação server-side da cotação.
 - Histórico e exportação obedecem suas permissões.
 - Abrir uma URL direta funciona após autenticação.
 - Um cálculo inexistente apresenta estado próprio, sem quebrar a aplicação.
+
+## Comportamento responsivo
+
+- A barra de voltar, pedido e histórico quebra em linhas e empilha as ações em celular compacto.
+- Foto, identificação e clientes vinculados ocupam a largura disponível sem impor mínimo ao card.
+- Totais passam de três para duas ou uma coluna conforme o espaço, sem truncar valores monetários.
+- A composição permanece tabular para preservar comparação e rola somente dentro da região
+  rotulada; o documento não ganha rolagem horizontal.
+- O modo de ocultar preços remove as colunas de referência sem desorganizar o restante do detalhe.

@@ -35,6 +35,14 @@ Cada linha mantém miniatura ou placeholder, tipo, código, descrição, referê
 texto alternativo útil, carregamento lazy e dimensões estáveis. No layout móvel, miniatura, código,
 descrição e ação principal permanecem acessíveis.
 
+Até 700 px, cada linha é apresentada como cartão rotulado, preservando foto, tipo, código, descrição,
+referência, origem e todas as ações. Busca, filtro e contagem ocupam linhas próprias quando necessário,
+e os botões de foto e composição mantêm área mínima de toque de 44 px.
+
+A composição continua como tabela comparativa em uma região de rolagem horizontal interna, com código
+e descrição em larguras legíveis. O modal, o gerenciador de foto e o visualizador de imagem respeitam a
+largura e a altura dinâmica da viewport, inclusive em 320 × 568 e celular horizontal.
+
 ## Critérios verificados
 
 - catálogo paginado e deduplicado;

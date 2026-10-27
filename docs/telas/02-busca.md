@@ -115,6 +115,17 @@ campo exibem `—`. A busca textual e a ordenação também aceitam a referênci
 - O endpoint exige `calculation.view`.
 - A unidade da grade ficou definida como uma linha por combinação de kit e lista/perfil de preço.
 
+## Comportamento responsivo
+
+- Até 700 px, cada resultado vira um cartão rotulado com foto, código, descrição, referência, perfil,
+  preços, data, responsável e ação; nenhuma coluna é descartada.
+- A ordenação permanece disponível no modo cartão por um seletor de campo e um botão de direção. O
+  estado continua refletido na URL e usa a mesma consulta do cabeçalho desktop.
+- Busca, perfil, contagem e paginação empilham sem ampliar o documento. Valores de referência ocultos
+  saem do fluxo sem desalinhá-lo.
+- Acima de 700 px, a tabela completa permanece em uma região de rolagem interna quando a largura
+  disponível não comporta todas as colunas.
+
 ## Comportamento alvo do backend
 
 A consulta deve retornar uma resposta paginada contendo:

@@ -15,6 +15,7 @@ let roles: ManagedRole[] = [];
 let editingUserId: string | null = null;
 let statusTarget: { id: string; active: boolean } | null = null;
 let initialized = false;
+const modalReturnFocus = new Map<string, HTMLElement>();
 
 const CREATE_ROLE_LABELS = new Map<string, string>([
   [ROLE_CODES.administrator, 'Admin'],
@@ -127,10 +128,16 @@ function renderUsers(): void {
     meta.append(state, permissions);
     copy.append(name, email, meta);
 
+    const roleGroup = document.createElement('div');
+    roleGroup.className = 'user-role';
+    const roleLabel = document.createElement('span');
+    roleLabel.className = 'user-field-label';
+    roleLabel.textContent = 'Perfil';
     const role = document.createElement('span');
     role.className = `tag ${user.role.code === 'ADMINISTRATOR' ? 'tag-blue' : 'tag-gray'}`;
     role.textContent = user.role.name;
-    row.append(avatar, copy, role);
+    roleGroup.append(roleLabel, role);
+    row.append(avatar, copy, roleGroup);
 
     if (canManage()) {
       const actions = document.createElement('div');
@@ -178,6 +185,8 @@ function renderRoles(): void {
     const name = document.createElement('td');
     name.textContent = role.name;
     const permissions = document.createElement('td');
+    name.dataset.label = 'Perfil';
+    permissions.dataset.label = 'Permissões';
     permissions.className = 'users-permissions';
     permissions.textContent = role.permissions.join(', ') || 'Sem permissões';
     row.append(name, permissions);
@@ -212,8 +221,10 @@ async function load(): Promise<void> {
   }
 }
 
-function closeModal(id: string): void {
+function closeModal(id: string, restoreFocus = true): void {
   element<HTMLElement>(`#${id}`).classList.remove('open');
+  if (restoreFocus) modalReturnFocus.get(id)?.focus();
+  modalReturnFocus.delete(id);
 }
 
 function closeEditModal(): void {
@@ -234,6 +245,9 @@ function openEdit(id: string): void {
     user.permissions.includes('commission.access');
   populateRoleSelect(element<HTMLSelectElement>('#edit-perfil'), user.role.code);
   setError('#edit-user-error', '');
+  if (document.activeElement instanceof HTMLElement) {
+    modalReturnFocus.set('modal-editar-usuario', document.activeElement);
+  }
   element<HTMLElement>('#modal-editar-usuario').classList.add('open');
   element<HTMLInputElement>('#edit-nome').focus();
 }
@@ -253,7 +267,38 @@ function openStatus(id: string): void {
   confirm.textContent = activating ? 'Ativar usuário' : 'Desativar usuário';
   confirm.className = activating ? 'btn btn-primary' : 'btn btn-danger';
   setError('#status-user-error', '');
+  if (document.activeElement instanceof HTMLElement) {
+    modalReturnFocus.set('modal-status-usuario', document.activeElement);
+  }
   element<HTMLElement>('#modal-status-usuario').classList.add('open');
+  confirm.focus();
+}
+
+function handleModalKeyboard(event: KeyboardEvent, modalId: string): void {
+  const modal = element<HTMLElement>(`#${modalId}`);
+  if (!modal.classList.contains('open')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (modalId === 'modal-editar-usuario') closeEditModal();
+    else closeModal(modalId);
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = [
+    ...modal.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter((item) => item.getClientRects().length > 0);
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 async function submitCreate(event: SubmitEvent): Promise<void> {
@@ -364,6 +409,11 @@ export function initializeUsersPage(): void {
   for (const id of ['status-user-close', 'status-user-cancel']) {
     element<HTMLButtonElement>(`#${id}`).addEventListener('click', () =>
       closeModal('modal-status-usuario'),
+    );
+  }
+  for (const id of ['modal-editar-usuario', 'modal-status-usuario']) {
+    element<HTMLElement>(`#${id}`).addEventListener('keydown', (event) =>
+      handleModalKeyboard(event, id),
     );
   }
 }

@@ -329,6 +329,7 @@ test('mantém a fila utilizável em tela móvel', async ({ page }) => {
     }),
   );
   await page.goto('/aprovacoes/precos');
+  await page.getByRole('button', { name: 'Menu' }).click();
   await page.getByRole('button', { name: 'Solicitações de aprovação, 1 pendência' }).click();
   const notificationPanel = page.locator('#admin-approvals-notification-panel');
   await expect(notificationPanel).toBeVisible();

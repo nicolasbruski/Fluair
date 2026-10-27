@@ -173,9 +173,9 @@ function renderDetail(detail: CalculationDetail): void {
     pdfButton.addEventListener('click', () => void exportCalculationPdf(pdfButton));
     toolbar.append(excelButton, pdfButton);
   }
-  const scroll = node('div');
-  scroll.setAttribute('style', 'overflow:auto;max-height:520px');
-  const table = node('table');
+  const scroll = node('div', 'responsive-table-region detail-composition-region');
+  scroll.setAttribute('aria-label', 'Composição do kit');
+  const table = node('table', 'detail-composition-table');
   const head = table.createTHead().insertRow();
   for (const [index, label] of [
     'Código',
@@ -252,18 +252,10 @@ function originLabel(origin: string): string {
 }
 
 function historyEntry(version: CalculationHistoryItem): HTMLDivElement {
-  const entry = node('div');
-  entry.setAttribute(
-    'style',
-    'display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);flex-wrap:wrap',
-  );
-  const marker = node('div');
-  marker.setAttribute(
-    'style',
-    `width:10px;height:10px;border-radius:50%;background:${version.current ? 'var(--accent)' : 'var(--text3)'};flex-shrink:0`,
-  );
-  const content = node('div');
-  content.setAttribute('style', 'flex:1;min-width:220px');
+  const entry = node('div', 'detail-history-entry');
+  const marker = node('div', `detail-history-marker${version.current ? ' is-current' : ''}`);
+  marker.setAttribute('aria-hidden', 'true');
+  const content = node('div', 'detail-history-content');
   const title = node('div', '', `Versão ${version.version}`);
   title.setAttribute('style', 'font-size:13px;font-weight:600');
   if (version.current) title.append(' ', node('span', 'tag tag-green', 'atual'));
@@ -297,8 +289,7 @@ function historyEntry(version: CalculationHistoryItem): HTMLDivElement {
     height: 48,
     expandable: true,
   });
-  const actions = node('div');
-  actions.setAttribute('style', 'display:flex;gap:6px');
+  const actions = node('div', 'detail-history-actions responsive-actions');
   const view = node('button', 'btn btn-ghost btn-sm', 'Ver composição');
   view.type = 'button';
   view.addEventListener('click', () => navigateToVersion(version.id));

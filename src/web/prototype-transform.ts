@@ -1,35 +1,45 @@
 const navigation = `<!-- NAV MIGRADA -->
 <nav class="nav" id="app-nav" aria-label="Navegação principal" hidden>
-  <div class="nav-brand">
-    <div class="nav-logo"><img src="/Logo.jpg" alt="Fluair"></div>
+  <div class="nav-bar">
+    <a class="nav-brand" href="/calculos" aria-label="Fluair — ir para a página inicial">
+      <span class="nav-logo"><img src="/Logo.jpg" alt=""></span>
+    </a>
+    <button class="nav-menu-toggle" id="nav-menu-toggle" type="button" aria-expanded="false" aria-controls="nav-menu">
+      <span class="nav-menu-icon" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span>Menu</span>
+    </button>
   </div>
-  <a class="tab" href="/calculos" data-screen="busca" data-permissions="calculation.view">Busca</a>
-  <a class="tab" href="/calculos/novo" data-screen="calc" data-permissions="calculation.create">Calcular</a>
-  <a class="tab" href="/pedidos/novo" data-screen="pedido" data-permissions="order.access">Pedidos</a>
-  <a class="tab" href="/produtos" data-screen="produtos" data-permissions="price.view,catalog.manage">Produtos</a>
-  <a class="tab" href="/clientes" data-screen="clientes" data-permissions="customer.view,customer.manage">Clientes</a>
-  <a class="tab" href="/listas" data-screen="matriz" data-permissions="matrix.view,matrix.manage">Listas de Preço</a>
-  <a class="tab" href="/comissoes" data-screen="comissoes" data-permissions="commission.access">Comissões</a>
-  <a class="tab" href="/usuarios" data-screen="usuarios" data-permissions="user.view,user.manage">Usuários</a>
-  <div class="session-user" aria-label="Sessão atual">
-    <label class="price-visibility-toggle" for="hide-reference-prices" title="Ocultar valores mínimos e normais">
-      <span class="price-visibility-label">Ocultar preços</span>
-      <input id="hide-reference-prices" data-reference-price-visibility type="checkbox" role="switch" aria-label="Ocultar valores mínimos e normais">
-      <span class="price-visibility-track" aria-hidden="true"></span>
-    </label>
-    <div class="approval-notifications" id="admin-approval-notifications" hidden>
-      <button class="approval-notifications-button" id="admin-approvals-notification-button" type="button" aria-label="Solicitações de aprovação, sem pendências" aria-haspopup="dialog" aria-expanded="false" aria-controls="admin-approvals-notification-panel">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
-        <span class="approval-notifications-dot" id="admin-approvals-badge" aria-hidden="true" hidden></span>
-      </button>
-      <section class="approval-notifications-panel" id="admin-approvals-notification-panel" role="dialog" aria-labelledby="admin-approvals-notification-title" hidden>
-        <div class="approval-notifications-header"><div><strong id="admin-approvals-notification-title">Solicitações de aprovação</strong><small id="admin-approvals-notification-subtitle">Preços aguardando análise</small></div><button class="approval-notifications-close" id="admin-approvals-notification-close" type="button" aria-label="Fechar notificações">×</button></div>
-        <div class="approval-notifications-list" id="admin-approvals-notification-list" aria-live="polite"><div class="approval-notifications-state">Carregando solicitações…</div></div>
-        <a class="approval-notifications-all" id="admin-approvals-nav-link" href="/aprovacoes/precos" data-screen="aprovacoes" data-permissions="order.price-approval.manage" hidden>Ver histórico completo</a>
-      </section>
+  <div class="nav-menu" id="nav-menu">
+    <div class="nav-links" aria-label="Módulos permitidos">
+      <a class="tab" href="/calculos" data-screen="busca" data-permissions="calculation.view">Busca</a>
+      <a class="tab" href="/calculos/novo" data-screen="calc" data-permissions="calculation.create">Calcular</a>
+      <a class="tab" href="/pedidos/novo" data-screen="pedido" data-permissions="order.access">Pedidos</a>
+      <a class="tab" href="/produtos" data-screen="produtos" data-permissions="price.view,catalog.manage">Produtos</a>
+      <a class="tab" href="/clientes" data-screen="clientes" data-permissions="customer.view,customer.manage">Clientes</a>
+      <a class="tab" href="/listas" data-screen="matriz" data-permissions="matrix.view,matrix.manage">Listas de Preço</a>
+      <a class="tab" href="/comissoes" data-screen="comissoes" data-permissions="commission.access">Comissões</a>
+      <a class="tab" href="/usuarios" data-screen="usuarios" data-permissions="user.view,user.manage">Usuários</a>
     </div>
-    <span class="session-user-name" id="session-user-name"></span>
-    <button class="btn btn-ghost btn-sm" id="logout-button" type="button">Sair</button>
+    <div class="session-user" aria-label="Sessão atual">
+      <label class="price-visibility-toggle" for="hide-reference-prices" title="Ocultar valores mínimos e normais">
+        <span class="price-visibility-label">Ocultar preços</span>
+        <input id="hide-reference-prices" data-reference-price-visibility type="checkbox" role="switch" aria-label="Ocultar valores mínimos e normais">
+        <span class="price-visibility-track" aria-hidden="true"></span>
+      </label>
+      <div class="approval-notifications" id="admin-approval-notifications" hidden>
+        <button class="approval-notifications-button" id="admin-approvals-notification-button" type="button" aria-label="Solicitações de aprovação, sem pendências" aria-haspopup="dialog" aria-expanded="false" aria-controls="admin-approvals-notification-panel">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+          <span class="approval-notifications-dot" id="admin-approvals-badge" aria-hidden="true" hidden></span>
+        </button>
+        <section class="approval-notifications-panel" id="admin-approvals-notification-panel" role="dialog" aria-labelledby="admin-approvals-notification-title" hidden>
+          <div class="approval-notifications-header"><div><strong id="admin-approvals-notification-title">Solicitações de aprovação</strong><small id="admin-approvals-notification-subtitle">Preços aguardando análise</small></div><button class="approval-notifications-close" id="admin-approvals-notification-close" type="button" aria-label="Fechar notificações">×</button></div>
+          <div class="approval-notifications-list" id="admin-approvals-notification-list" aria-live="polite"><div class="approval-notifications-state">Carregando solicitações…</div></div>
+          <a class="approval-notifications-all" id="admin-approvals-nav-link" href="/aprovacoes/precos" data-screen="aprovacoes" data-permissions="order.price-approval.manage" hidden>Ver histórico completo</a>
+        </section>
+      </div>
+      <span class="session-user-name" id="session-user-name"></span>
+      <button class="btn btn-ghost btn-sm" id="logout-button" type="button">Sair</button>
+    </div>
   </div>
 </nav>`;
 
@@ -66,7 +76,6 @@ const loginScreen = `<!-- ══════════════════
     <div class="login-card">
       <div class="login-brand">
         <img class="login-logo" src="/Logo.jpg" alt="Fluair">
-        <h1>Sistema de Formação de Preço</h1>
       </div>
 
       <form id="login-form" novalidate>
@@ -178,11 +187,24 @@ const searchScreen = `<!-- BUSCA SEM DADOS DEMONSTRATIVOS -->
     <select class="inp" style="width:auto;padding:8px 12px;font-size:12px;flex-shrink:0" id="busca-cli">
       <option value="">Todos os perfis de preço</option>
     </select>
+    <div class="search-mobile-sort">
+      <label for="busca-sort">Ordenar por</label>
+      <select class="inp" id="busca-sort">
+        <option value="code">Código</option>
+        <option value="description">Descrição</option>
+        <option value="reference">Referência</option>
+        <option value="priceList">Perfil de preço</option>
+        <option value="minimumTotal">Tabela mínima</option>
+        <option value="normalTotal">Tabela máxima</option>
+        <option value="createdAt">Data do cálculo</option>
+      </select>
+      <button class="btn btn-ghost" id="busca-sort-direction" type="button" aria-label="Alternar direção da ordenação"></button>
+    </div>
     <div class="grid-count" id="busca-count"></div>
   </div>
 
-  <div class="card" style="padding:0;overflow:hidden;margin-bottom:8px">
-    <div style="overflow-x:auto">
+  <div class="card search-results-card" style="padding:0;overflow:hidden;margin-bottom:8px">
+    <div class="responsive-table-region search-table-region" aria-label="Resultados da busca de cálculos">
       <table id="busca-table">
         <thead>
           <tr>
@@ -218,7 +240,7 @@ const productsScreen = `<!-- CATÁLOGO SALVO -->
     <select class="inp products-filter" id="products-filter" aria-label="Filtrar catálogo"><option value="ALL">Todos</option><option value="KITS">Kits</option><option value="PRODUCTS">Produtos avulsos</option><option value="WITHOUT_IMAGE">Sem foto</option></select>
     <div class="grid-count" id="products-count"></div>
   </div>
-  <div class="card" style="padding:0;overflow:hidden;margin-bottom:8px"><div style="overflow-x:auto"><table id="products-table"><thead><tr><th>Foto</th><th>Tipo</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Origem</th><th>Ações</th></tr></thead><tbody id="products-tbody"></tbody></table></div></div>
+  <div class="card products-results-card" style="padding:0;overflow:hidden;margin-bottom:8px"><div class="responsive-table-region products-table-region" aria-label="Catálogo de produtos"><table id="products-table"><thead><tr><th>Foto</th><th>Tipo</th><th>Código</th><th>Descrição</th><th>Referência</th><th>Origem</th><th>Ações</th></tr></thead><tbody id="products-tbody"></tbody></table></div></div>
   <div class="pg" id="products-pagination"></div>
 </div>
 
@@ -228,10 +250,9 @@ const productsScreen = `<!-- CATÁLOGO SALVO -->
 
 const detailScreen = `<!-- DETALHE DE CÁLCULO INTEGRADO À API -->
 <div class="screen" id="s-detalhe">
-  <style>.detail-version-photo{display:flex;flex-direction:column;align-items:center;gap:5px;flex:0 0 180px}.detail-version-photo__label{color:var(--text3);font-size:9px;font-weight:750;text-transform:uppercase}@media(max-width:700px){.detail-version-photo{flex-basis:100%;align-items:flex-start}.detail-version-photo .media-image{width:100%!important;height:180px!important}}</style>
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+  <div class="detail-toolbar responsive-actions">
     <button class="btn btn-ghost" id="detail-back" type="button" style="gap:6px">Voltar para Busca</button>
-    <div style="flex:1"></div>
+    <div class="detail-toolbar-spacer"></div>
     <button class="btn btn-ghost" id="detail-order" type="button" style="gap:7px">Gerar pedido com este kit</button>
     <button class="btn btn-ghost" id="detail-history" type="button" style="gap:7px">Histórico de versões</button>
     <span class="tag tag-blue" style="font-size:12px;padding:5px 12px">Dados do banco</span>
@@ -244,12 +265,12 @@ const detailScreen = `<!-- DETALHE DE CÁLCULO INTEGRADO À API -->
 
 const historyModal = `<!-- HISTÓRICO REAL DE VERSÕES DO KIT -->
 <div class="modal-overlay" id="modal-historico" role="dialog" aria-modal="true" aria-labelledby="hist-modal-title">
-  <div class="modal" style="max-width:680px">
+  <div class="modal detail-history-dialog">
     <div class="modal-header">
       <div><div class="modal-title" id="hist-modal-title">Histórico de versões</div><div style="font-size:12px;color:var(--text2);margin-top:2px" id="hist-modal-sub"></div></div>
       <button class="modal-close" id="detail-history-close" type="button" aria-label="Fechar">✕</button>
     </div>
-    <div id="hist-modal-body" aria-live="polite"></div>
+    <div class="detail-history-body" id="hist-modal-body" aria-live="polite"></div>
     <div class="modal-footer"><button class="btn btn-ghost" id="detail-history-done" type="button">Fechar</button></div>
   </div>
 </div>
@@ -444,8 +465,8 @@ const usersScreen = `<!-- USUÁRIOS INTEGRADOS À API -->
       </section>
 
       <div class="stitle">Permissões por perfil</div>
-      <div class="card card-sm" style="padding:0;overflow:hidden">
-        <table>
+      <div class="card card-sm users-roles-region" style="padding:0">
+        <table class="users-roles-table">
           <thead><tr><th>Perfil</th><th>Permissões</th></tr></thead>
           <tbody id="users-roles-body"><tr><td colspan="2">Carregando…</td></tr></tbody>
         </table>
@@ -850,7 +871,7 @@ function migrateOrders(source: string): string {
 export function transformPrototype(source: string): string {
   let result = source
     .replace(/\r\n/g, '\n')
-    .replace('Fluair — Esboço Fase 2', 'Fluair — Sistema de Formação de Preço');
+    .replace('Fluair — Esboço Fase 2', 'Fluair');
   result = result.replace(/<!-- NAV -->[\s\S]*?<\/nav>/, navigation);
   result = replaceSection(
     result,

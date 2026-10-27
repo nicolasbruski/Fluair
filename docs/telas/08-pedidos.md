@@ -153,3 +153,19 @@ vendido é consultado a partir desse snapshot imutável; não é copiado para pr
 
 Um cálculo nasce como `CUSTOMER_SPECIFIC`. Administradores podem alterar sua disponibilidade no
 catálogo de Produtos salvos para `STANDARD`, preservando o cálculo e seus vínculos históricos.
+
+## Comportamento responsivo
+
+- O shell usa uma coluna e largura fluida em telas estreitas; cliente, observação, totais e ação
+  principal permanecem dentro da viewport.
+- A fila de até cinco rascunhos é uma região de rolagem horizontal local quando não houver espaço.
+  Gradientes laterais indicam continuação, e seleção e descarte mantêm alvos de toque de 44 px.
+- O drawer ocupa a largura disponível no celular, respeita `safe-area`, usa altura dinâmica e mantém
+  cabeçalho, busca, filtros, catálogo e paginação alcançáveis. Foto, identificação e preços se
+  reorganizam sem retirar o botão de adicionar.
+- Quantidade, preço-base, impostos e subtotal passam para linhas próprias abaixo de 700 px. Os quatro
+  impostos possuem área clicável mínima de 44 px e valores longos quebram sem corte.
+- Revisão e solicitação de aprovação usam conteúdo interno rolável com cabeçalho e rodapé fixos no
+  modal. Em 320 × 568 e 667 × 375, voltar, confirmar, cancelar e enviar continuam visíveis.
+- As regras específicas ficam em `src/web/responsive-orders-approvals.css` e são verificadas por
+  `tests/e2e/task-006-responsiveness.spec.ts` nas dez viewports da matriz responsiva.

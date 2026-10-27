@@ -1,0 +1,270 @@
+/*
+ * Clientes
+ *
+ * 1100 px: a listagem passa de tabela para cartões rotulados.
+ * 700 px: toolbar, formulários e detalhes usam uma coluna mais confortável.
+ * 480 px: ações e paginação são empilhadas para suportar 320 px.
+ */
+
+#s-clientes,
+#s-clientes .customers-card,
+#s-clientes .customers-toolbar,
+#s-clientes .customers-table-wrap,
+.customer-modal,
+.customer-links-modal,
+.customer-details-panel,
+.customer-links-body,
+.customer-calculation-card,
+.customer-calculation-heading,
+.customer-calculation-controls {
+  min-width: 0;
+  max-width: 100%;
+}
+
+#s-clientes :where(td, button, span, p),
+.customer-links-modal :where(strong, span, dd, p) {
+  overflow-wrap: anywhere;
+}
+
+#s-clientes .customers-heading-actions .btn,
+#s-clientes .customers-toolbar .btn,
+#s-clientes .customers-pagination .btn,
+#s-clientes .customer-name-link,
+#s-clientes .customer-actions-buttons .btn,
+.customer-details-tab,
+.customer-calculation-controls .btn {
+  min-height: 44px;
+}
+
+#s-clientes .customer-name-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
+#s-clientes .customer-actions-buttons {
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#s-clientes .customer-actions-buttons .btn {
+  width: auto;
+  min-width: 88px;
+  padding-inline: 12px;
+  font-size: 11px;
+}
+
+.customer-modal,
+.customer-links-modal {
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+
+.customer-modal form {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.customer-modal .modal-footer,
+.customer-links-modal .modal-footer,
+.customer-links-modal .modal-header,
+.customer-details-tabs {
+  flex-shrink: 0;
+}
+
+.customer-details-tabs {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.customer-details-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.customer-calculation-content {
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.customer-calculation-content:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.customer-calculation-items {
+  min-width: 700px;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  #s-clientes .customers-table-wrap {
+    overflow: visible;
+  }
+
+  #s-clientes .customers-table .customer-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 12px;
+    padding: 14px;
+  }
+
+  #s-clientes .customers-table .customer-row td {
+    padding: 7px 4px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  #s-clientes .customers-table .customer-row td::before {
+    margin-bottom: 4px;
+    font-size: 10px;
+  }
+
+  #s-clientes .customers-table .customer-row .customer-name-cell {
+    grid-column: span 2;
+  }
+
+  #s-clientes .customers-table .customer-row .customer-actions {
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 700px) {
+  #s-clientes .customers-heading {
+    gap: 12px;
+  }
+
+  #s-clientes .customers-toolbar {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  #s-clientes .customers-search {
+    grid-column: auto;
+  }
+
+  #s-clientes .customers-toolbar :where(.inp, .btn) {
+    min-height: 44px;
+  }
+
+  #s-clientes .customers-table .customer-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-links-modal {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+    height: calc(100dvh - 20px);
+  }
+
+  .customer-calculation-heading,
+  .customer-calculation-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .customer-calculation-controls {
+    width: 100%;
+  }
+
+  .customer-calculation-controls .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .customer-calculation-arrow {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+
+  .customer-calculation-summary {
+    position: relative;
+    padding-right: 38px;
+  }
+}
+
+@media (max-width: 480px) {
+  #s-clientes .customers-heading-actions,
+  #s-clientes .customers-heading-actions .btn {
+    width: 100%;
+  }
+
+  #s-clientes .customers-table .customer-row {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  #s-clientes .customers-table .customer-row .customer-name-cell,
+  #s-clientes .customers-table .customer-row .customer-actions {
+    grid-column: auto;
+  }
+
+  #s-clientes .customer-actions-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  #s-clientes .customer-actions-buttons .btn {
+    width: 100%;
+    max-width: none;
+  }
+
+  #s-clientes .customers-pagination {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  #s-clientes .customers-pagination > span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    text-align: center;
+  }
+
+  .customer-modal,
+  .customer-links-modal {
+    width: calc(100vw - 12px);
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  .customer-modal .modal-footer,
+  .customer-links-modal .modal-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .customer-modal .modal-footer .btn,
+  .customer-links-modal .modal-footer .btn {
+    width: 100%;
+  }
+
+  .customer-location-field,
+  .customer-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-info-item.is-wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-height: 520px) {
+  .customer-modal,
+  .customer-links-modal {
+    max-height: calc(100dvh - 8px);
+  }
+
+  .customer-info-grid,
+  .customer-links-body {
+    padding-block: 10px;
+  }
+}

@@ -7,6 +7,7 @@ const PAGE_SIZE = 30;
 const validSorts = new Set<CalculationSearchSort>([
   'code',
   'description',
+  'reference',
   'priceList',
   'minimumTotal',
   'normalTotal',
@@ -85,9 +86,15 @@ function profileTagClass(item: CalculationSearchItem): string {
   return 'tag-gray';
 }
 
-function cell(row: HTMLTableRowElement, text: string, style = ''): HTMLTableCellElement {
+function cell(
+  row: HTMLTableRowElement,
+  text: string,
+  label: string,
+  style = '',
+): HTMLTableCellElement {
   const td = row.insertCell();
   td.textContent = text;
+  td.dataset.label = label;
   if (style) td.setAttribute('style', style);
   return td;
 }
@@ -97,8 +104,10 @@ function renderRows(calculations: CalculationSearchItem[]): void {
   body.replaceChildren();
   for (const calculation of calculations) {
     const row = body.insertRow();
+    row.className = 'search-result-row';
     const photo = row.insertCell();
     photo.className = 'search-photo-cell';
+    photo.dataset.label = 'Foto';
     photo.append(
       createMediaImage({
         image: calculation.image,
@@ -110,14 +119,16 @@ function renderRows(calculations: CalculationSearchItem[]): void {
         expandable: true,
       }),
     );
-    cell(row, calculation.kitCode, 'font-weight:600;color:var(--accent)');
+    cell(row, calculation.kitCode, 'Código', 'font-weight:600;color:var(--accent)');
     cell(
       row,
       descriptionWithoutUser(calculation.kitDescription),
+      'Descrição',
       'color:var(--text2);font-size:12px;max-width:220px',
     );
-    cell(row, calculation.reference || '—', 'color:var(--text2);font-size:12px');
+    cell(row, calculation.reference || '—', 'Referência', 'color:var(--text2);font-size:12px');
     const profileCell = row.insertCell();
+    profileCell.dataset.label = 'Perfil de preço';
     const tag = document.createElement('span');
     tag.className = `tag ${profileTagClass(calculation)}`;
     tag.textContent = calculation.priceList.name;
@@ -125,16 +136,20 @@ function renderRows(calculations: CalculationSearchItem[]): void {
     cell(
       row,
       money(calculation.minimumTotal),
+      'Tabela mínima',
       'text-align:right;font-weight:600;color:#ff6b00',
     ).classList.add('reference-price');
     cell(
       row,
       money(calculation.normalTotal),
+      'Tabela máxima',
       'text-align:right;font-weight:600;color:var(--accent)',
     ).classList.add('reference-price');
-    cell(row, dateTime(calculation.createdAt), 'color:var(--text2);font-size:12px');
-    cell(row, calculation.createdBy, 'font-size:12px;color:var(--text2)');
+    cell(row, dateTime(calculation.createdAt), 'Calculado em', 'color:var(--text2);font-size:12px');
+    cell(row, calculation.createdBy, 'Por', 'font-size:12px;color:var(--text2)');
     const actionCell = row.insertCell();
+    actionCell.className = 'search-result-action';
+    actionCell.dataset.label = 'Ação';
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-ghost btn-xs';
@@ -158,6 +173,7 @@ function renderMessage(title: string, message: string, retry = false): void {
   const row = body.insertRow();
   const td = row.insertCell();
   td.colSpan = 10;
+  td.className = 'search-result-state';
   const container = document.createElement('div');
   container.className = 'empty';
   container.setAttribute('style', 'padding:48px 20px');
@@ -230,6 +246,11 @@ function renderHeaders(): void {
       `sortable${referencePrice ? ' reference-price' : ''}` +
       `${state.sort === sort ? (state.direction === 'asc' ? ' sa' : ' sd') : ''}`;
   }
+  const sort = element<HTMLSelectElement>('#busca-sort');
+  sort.value = state.sort;
+  const direction = element<HTMLButtonElement>('#busca-sort-direction');
+  direction.textContent = state.direction === 'asc' ? 'Crescente ↑' : 'Decrescente ↓';
+  direction.setAttribute('aria-pressed', String(state.direction === 'desc'));
 }
 
 async function load(): Promise<void> {
@@ -301,6 +322,20 @@ export function initializeSearchPage(): void {
     state.priceListId = select.value;
     state.page = 1;
     writeState();
+    void load();
+  });
+  element<HTMLSelectElement>('#busca-sort').addEventListener('change', (event) => {
+    state.sort = (event.currentTarget as HTMLSelectElement).value as CalculationSearchSort;
+    state.page = 1;
+    writeState();
+    renderHeaders();
+    void load();
+  });
+  element<HTMLButtonElement>('#busca-sort-direction').addEventListener('click', () => {
+    state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+    state.page = 1;
+    writeState();
+    renderHeaders();
     void load();
   });
   for (const [sort, id] of Object.entries(headerIds) as Array<[CalculationSearchSort, string]>) {
