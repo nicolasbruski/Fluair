@@ -14,6 +14,7 @@ describe('transformPrototype', () => {
     const transformed = transformPrototype(original);
 
     expect(transformed).toContain('id="login-form"');
+    expect(transformed).toContain('<link rel="icon" type="image/jpeg" href="/Logo.jpg">');
     expect(transformed.match(/<img[^>]+src="\/Logo\.jpg"[^>]+alt="Fluair"/g)).toHaveLength(1);
     expect(transformed).toContain('<span class="nav-logo"><img src="/Logo.jpg" alt=""></span>');
     expect(transformed).toContain('class="nav-logo"');

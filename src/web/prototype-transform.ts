@@ -115,8 +115,6 @@ const loginScreen = `<!-- ══════════════════
           <span id="login-submit-label">Entrar</span>
         </button>
       </form>
-
-      <p class="login-help">Problemas para acessar? Fale com o administrador.</p>
     </div>
   </div>
 </div>`;
@@ -872,6 +870,10 @@ export function transformPrototype(source: string): string {
   let result = source
     .replace(/\r\n/g, '\n')
     .replace('Fluair — Esboço Fase 2', 'Fluair');
+  result = result.replace(
+    '</head>',
+    '  <link rel="icon" type="image/jpeg" href="/Logo.jpg">\n</head>',
+  );
   result = result.replace(/<!-- NAV -->[\s\S]*?<\/nav>/, navigation);
   result = replaceSection(
     result,
