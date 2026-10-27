@@ -25,7 +25,7 @@ branch `main`. Use:
 
 - Node.js: `22.x`;
 - diretório raiz: `.`;
-- comando de build temporário: `npm run setup:hostinger`;
+- comando de build: `npm run build` (detectado automaticamente pela Hostinger);
 - diretório de saída: `dist`;
 - arquivo de entrada, se solicitado: `dist/src/server/server.js`;
 - comando de inicialização, se solicitado: `npm start`.
@@ -43,6 +43,8 @@ ORDER_PRICE_APPROVAL_VALIDITY_DAYS=7
 ORDER_NOTIFICATION_RECIPIENTS=EMAIL_QUE_RECEBE_OS_PEDIDOS
 EMAIL_DELIVERY_ENABLED=false
 EMAIL_WORKER_ENABLED=false
+HOSTINGER_DEPLOY=true
+HOSTINGER_INITIAL_SETUP=true
 ADMIN_NAME=NOME_DO_PRIMEIRO_ADMINISTRADOR
 ADMIN_EMAIL=EMAIL_DO_PRIMEIRO_ADMINISTRADOR
 ADMIN_PASSWORD=SENHA_FORTE_DO_PRIMEIRO_ADMINISTRADOR
@@ -54,17 +56,19 @@ Para gerar `SESSION_SECRET` localmente:
 node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
 ```
 
-O comando `setup:hostinger` compila a aplicação, aplica todas as migrations, executa o seed e cria
-o primeiro administrador. Se o mesmo deploy for repetido, o seed e a criação desse mesmo
-administrador são idempotentes; a senha existente não é alterada.
+Com `HOSTINGER_DEPLOY=true`, o comando `build` compila a aplicação e aplica todas as migrations.
+No primeiro deploy, `HOSTINGER_INITIAL_SETUP=true` também executa o seed e cria o primeiro
+administrador. Se esse deploy for repetido, o seed e a criação do mesmo administrador são
+idempotentes; a senha existente não é alterada.
 
 Após o primeiro deploy bem-sucedido:
 
-1. troque o comando de build para `npm run deploy:hostinger`;
-2. remova `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` das variáveis da Hostinger;
+1. remova `HOSTINGER_INITIAL_SETUP`, `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` das variáveis
+   da Hostinger;
+2. mantenha `HOSTINGER_DEPLOY=true`;
 3. faça um novo deploy e teste o login.
 
-Nos deploys seguintes, `deploy:hostinger` compila o projeto e aplica apenas migrations pendentes.
+Nos deploys seguintes, `npm run build` compila o projeto e aplica apenas migrations pendentes.
 
 ## 3. Habilitar os e-mails com cron
 
